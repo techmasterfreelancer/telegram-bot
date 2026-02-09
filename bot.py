@@ -2,29 +2,34 @@ import logging
 import sqlite3
 import hashlib
 import os
+import re
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 
-# ============= APNI DETAILS YAHAN DAALEN =============
+# ============= CONFIGURATION =============
 
 BOT_TOKEN = "8535390425:AAGdysiGhg5y82rCLkVi2t2yJGGhCXXlnIY"
-ADMIN_ID = 7291034213  # YAHAN_APNA_TELEGRAM_ID_DAALEN
+ADMIN_ID = 7291034213  # YOUR_TELEGRAM_ID_HERE
 
 # GROUP LINKS
-TELEGRAM_GROUP_LINK = "https://t.me/+YAHAN_TELEGRAM_LINK_DAALEN"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YAHAN_WHATSAPP_LINK_DAALEN"
+TELEGRAM_GROUP_LINK = "https://t.me/YOUR_TELEGRAM_GROUP_LINK"
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK"
 
 # PAYMENT DETAILS
-BINANCE_EMAIL = "aapka.binance@email.com"
-BINANCE_ID = "123456789"
-BINANCE_NETWORK = "TRC20"
+BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
+BINANCE_ID = "1129541950"
+BINANCE_NETWORK = "TRC20" Address: TM6w24pqU7Z4FenAX4LfLHBCYB5x13XSvj
 
-EASYPAYSA_NAME = "Aapka Naam"
-EASYPAYSA_NUMBER = "03XX-XXXXXXX"
+EASYPAYSA_NAME = "Jaffar Ali"
+EASYPAYSA_NUMBER = "03486623402"
 
 MEMBERSHIP_FEE = "$5 USD (Lifetime)"
+
+# REMINDER SETTINGS
+REMINDER_INTERVAL_HOURS = 24  # Reminder every 24 hours
+CHECK_INTERVAL_MINUTES = 60   # Check every hour
 
 # =====================================================
 
@@ -54,7 +59,10 @@ def init_db():
         payment_hash TEXT UNIQUE,
         status TEXT DEFAULT 'new',
         created_at TIMESTAMP,
-        updated_at TIMESTAMP
+        updated_at TIMESTAMP,
+        admin_approved_at TIMESTAMP,
+        last_reminder_sent TIMESTAMP,
+        reminder_count INTEGER DEFAULT 0
     )''')
     
     c.execute('''CREATE TABLE IF NOT EXISTS screenshots (
@@ -85,9 +93,9 @@ def create_user(user_id, username):
     c = conn.cursor()
     now = datetime.now()
     c.execute('''INSERT OR IGNORE INTO users 
-                 (user_id, username, current_step, status, created_at, updated_at) 
-                 VALUES (?, ?, ?, ?, ?, ?)''',
-              (user_id, username, 'start', 'new', now, now))
+                 (user_id, username, current_step, status, created_at, updated_at, reminder_count) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
+              (user_id, username, 'start', 'new', now, now, 0))
     conn.commit()
     conn.close()
 
@@ -123,6 +131,82 @@ def save_hash(file_hash, user_id):
     finally:
         conn.close()
 
+def get_pending_payment_users():
+    """Get users where exactly 24, 48, 72... hours have passed since admin approval"""
+    conn = get_db()
+    c = conn.cursor()
+    now = datetime.now()
+    
+    # Get all payment_pending users
+    c.execute('''SELECT user_id, username, full_name, admin_approved_at, 
+                 last_reminder_sent, reminder_count 
+                 FROM users 
+                 WHERE status = 'payment_pending' ''')
+    results = c.fetchall()
+    conn.close()
+    
+    users_to_remind = []
+    
+    for user in results:
+        approved_at = user[3]
+        if not approved_at:
+            continue
+            
+        # Parse approval time
+        try:
+            if isinstance(approved_at, str):
+                approved_time = datetime.strptime(approved_at, '%Y-%m-%d %H:%M:%S.%f')
+            else:
+                approved_time = approved_at
+        except:
+            continue
+        
+        # Calculate hours since approval
+        hours_since_approval = int((now - approved_time).total_seconds() / 3600)
+        
+        # Check if it's time for reminder (24, 48, 72, 96... hours)
+        if hours_since_approval > 0 and hours_since_approval % REMINDER_INTERVAL_HOURS == 0:
+            # Check if we already sent reminder in last 30 minutes (to avoid duplicates)
+            last_reminder = user[4]
+            if last_reminder:
+                try:
+                    if isinstance(last_reminder, str):
+                        last_reminder_time = datetime.strptime(last_reminder, '%Y-%m-%d %H:%M:%S.%f')
+                    else:
+                        last_reminder_time = last_reminder
+                    
+                    minutes_since_last_reminder = int((now - last_reminder_time).total_seconds() / 60)
+                    
+                    # If last reminder was sent less than 30 minutes ago, skip
+                    if minutes_since_last_reminder < 30:
+                        continue
+                except:
+                    pass
+            
+            users_to_remind.append(user)
+    
+    return users_to_remind
+
+def update_reminder_sent(user_id):
+    """Update last reminder time and increment count"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''UPDATE users 
+                 SET last_reminder_sent = ?, reminder_count = reminder_count + 1 
+                 WHERE user_id = ?''',
+              (datetime.now(), user_id))
+    conn.commit()
+    conn.close()
+
+def set_admin_approved_time(user_id):
+    """Set the time when admin approved the application"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE users SET admin_approved_at = ? WHERE user_id = ?",
+              (datetime.now(), user_id))
+    conn.commit()
+    conn.close()
+
 # ============= CONVERSATION STATES =============
 
 SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW, SELECT_PAYMENT, GET_PAYMENT_PROOF, FINAL_APPROVAL = range(9)
@@ -147,51 +231,64 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Existing user - check status
     step = user_data[7]  # current_step
     status = user_data[11]  # status
+    reminder_count = user_data[16] if len(user_data) > 16 else 0
     
-    # If already approved
+    # If already approved and active
     if status == 'approved':
         await update.message.reply_text(
             f"✅ *Welcome back {user.first_name}!*\n\n"
-            f"Aap already approved hain.\n\n"
+            f"You are already approved and have access to the premium groups.\n\n"
             f"🔗 *Telegram Group:*\n{TELEGRAM_GROUP_LINK}\n\n"
             f"📱 *WhatsApp Group:*\n{WHATSAPP_GROUP_LINK}",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
-    # If payment pending
+    # If info submitted, waiting for admin review (user skipped payment selection)
+    if status == 'new' and step == 'proof_submitted':
+        await update.message.reply_text(
+            f"⏳ *Hello {user.first_name}!*\n\n"
+            f"Your information has already been submitted for admin review.\n"
+            f"🕐 *Please wait...*\n\n"
+            f"Status: *Pending Review*\n"
+            f"The admin will review your application and notify you soon.\n\n"
+            f"⚠️ *Do not submit again. Please wait for admin response.*",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return ConversationHandler.END
+    
+    # If admin approved but user hasn't paid yet (PAYMENT PENDING REMINDER)
     if status == 'payment_pending':
         keyboard = [
             [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
             [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
         ]
+        
+        # Add urgency message if reminder count > 0
+        urgency_text = ""
+        if reminder_count > 0:
+            urgency_text = f"\n⚠️ *Reminder #{reminder_count}:* Your payment is still pending!\n"
+        
         await update.message.reply_text(
-            f"👋 *Welcome back {user.first_name}!*\n\n"
-            f"💎 *Premium Group Join Karne Ke Liye:*\n"
+            f"⏰ *Payment Reminder - {user.first_name}!*{urgency_text}\n\n"
+            f"✅ Your submitted information has been *reviewed and approved* by admin!\n\n"
+            f"💳 *Status: Payment Pending*\n\n"
+            f"💎 *To join the Premium Group, please complete your payment:*\n"
             f"💵 *Fee:* {MEMBERSHIP_FEE}\n\n"
-            f"👇 *Payment method select karein:*",
+            f"👇 *Select your payment method:*",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
         return SELECT_PAYMENT
     
-    # If proof submitted, waiting for admin
-    if step == 'proof_submitted':
-        await update.message.reply_text(
-            f"⏳ *Welcome back {user.first_name}!*\n\n"
-            f"Aapki application admin ke paas hai.\n"
-            f"🕐 *Approval ka intezaar karein...*\n\n"
-            f"Jab admin approve karega, aapko fee payment ka message mil jayega.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return ConversationHandler.END
-    
-    # If payment proof submitted
+    # If payment proof submitted, waiting for verification
     if step == 'payment_submitted':
         await update.message.reply_text(
-            f"⏳ *Welcome back {user.first_name}!*\n\n"
-            f"Aapka payment proof admin ke paas hai.\n"
-            f"🕐 *Verification ka intezaar karein...*",
+            f"⏳ *Hello {user.first_name}!*\n\n"
+            f"Your payment proof has been submitted to admin.\n"
+            f"🕐 *Waiting for verification...*\n\n"
+            f"Status: *Payment Verification Pending*\n"
+            f"You will receive group links once payment is confirmed.",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
@@ -200,7 +297,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == 'name_pending':
         await update.message.reply_text(
             f"🔄 *Welcome back {user.first_name}!*\n\n"
-            f"📝 *Apna full name bataiye:*",
+            f"📝 *Please enter your full name:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_NAME
@@ -209,7 +306,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"🔄 *Welcome back {user.first_name}!*\n\n"
             f"✅ Name: *{user_data[2]}*\n\n"
-            f"📧 *Apna email bataiye:*",
+            f"📧 *Please enter your email address:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_EMAIL
@@ -218,8 +315,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         request_type = user_data[5] or "product"
         await update.message.reply_text(
             f"🔄 *Welcome back {user.first_name}!*\n\n"
-            f"📸 *Aapne {request_type} ka proof nahi bheja.*\n\n"
-            f"Please screenshot bhejein:",
+            f"📸 *You have not sent your {request_type} proof yet.*\n\n"
+            f"Please send a clear screenshot:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_PROOF
@@ -230,7 +327,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Name: *{user_data[2]}*\n"
             f"✅ Email: *{user_data[3]}*\n"
             f"✅ Proof received\n\n"
-            f"📱 *Apna WhatsApp number bataiye:*",
+            f"📱 *Please enter your WhatsApp number (with country code):*\n\n"
+            f"Example: +923001234567, +14155552671, +447911123456",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
@@ -248,8 +346,8 @@ async def send_welcome(update, first_name):
     
     await update.message.reply_text(
         f"👋 *Welcome {first_name}!*\n\n"
-        f"Kya aapne meri website se *Premium Subscription* buy ki hai ya *koi Product* buy kiya hai?\n\n"
-        f"👇 *Select karein:*",
+        f"Did you purchase a *Premium Subscription* or a *Product* from my website?\n\n"
+        f"👇 *Please select:*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -270,8 +368,8 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"✅ *{request_type}* selected!\n\n"
-        f"💎 *Premium group mein add hone ke liye kuch information li jayegi.*\n\n"
-        f"📝 *Step 1/4: Apna full name bataiye:*",
+        f"💎 *To join the premium group, we need some information.*\n\n"
+        f"📝 *Step 1/4: Please enter your full name:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_NAME
@@ -288,7 +386,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"✅ *Name: {name}*\n\n"
-        f"📧 *Step 2/4: Apna email address bataiye:*",
+        f"📧 *Step 2/4: Please enter your email address:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_EMAIL
@@ -301,7 +399,7 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Validate
     if "@" not in email or "." not in email:
         await update.message.reply_text(
-            "❌ *Invalid email!* Sahi email bataiye:",
+            "❌ *Invalid email!* Please enter a valid email address:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_EMAIL
@@ -315,8 +413,8 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"✅ *Email: {email}*\n\n"
-        f"📸 *Step 3/4: Apne {request_type} ka proof/screenshot bhejiye:*\n\n"
-        f"⚠️ *Clear image honi chahiye jisme details dikhein*",
+        f"📸 *Step 3/4: Please send proof/screenshot of your {request_type}:*\n\n"
+        f"⚠️ *Image must be clear showing all details*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_PROOF
@@ -327,7 +425,7 @@ async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not update.message.photo:
         await update.message.reply_text(
-            "❌ *Please image bhejiye!* Screenshot bhejein:",
+            "❌ *Please send an image!* Send a screenshot:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_PROOF
@@ -344,8 +442,13 @@ async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"✅ *Proof received!*\n\n"
-        f"📱 *Step 4/4: Apna WhatsApp number bataiye (country code ke saath):*\n\n"
-        f"Example: +923001234567",
+        f"📱 *Step 4/4: Please enter your WhatsApp number (with country code):*\n\n"
+        f"Examples:\n"
+        f"🇵🇰 Pakistan: +923001234567\n"
+        f"🇺🇸 USA: +14155552671\n"
+        f"🇬🇧 UK: +447911123456\n"
+        f"🇮🇳 India: +919876543210\n"
+        f"🇦🇪 UAE: +971501234567",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_WHATSAPP
@@ -355,24 +458,36 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     whatsapp = update.message.text
     
-    # Basic validation
-    if len(whatsapp) < 10 or not whatsapp.replace('+', '').replace('-', '').isdigit():
+    # Universal WhatsApp validation for all countries
+    # Remove spaces, dashes, and common separators
+    cleaned_number = whatsapp.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    
+    # Check if starts with + and followed by 7-15 digits
+    pattern = r'^\+\d{7,15}$'
+    if not re.match(pattern, cleaned_number):
         await update.message.reply_text(
-            "❌ *Invalid number!* Sahi WhatsApp number bataiye:\n\n"
-            f"Example: +923001234567",
+            "❌ *Invalid number!* Please enter a valid WhatsApp number with country code:\n\n"
+            f"Examples:\n"
+            f"🇵🇰 +923001234567\n"
+            f"🇺🇸 +14155552671\n"
+            f"🇬🇧 +447911123456\n"
+            f"🇮🇳 +919876543210\n"
+            f"🇦🇪 +971501234567\n"
+            f"🇳🇬 +2348012345678\n"
+            f"🇧🇩 +8801712345678",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
     
-    update_user(user_id, 'whatsapp', whatsapp)
+    update_user(user_id, 'whatsapp', cleaned_number)
     update_step(user_id, 'proof_submitted')
     
     # Confirm to user
     await update.message.reply_text(
-        "✅ *Aapki information successfully submit ho gayi hai!*\n\n"
-        "🕐 *Aap se jald contact kiya jayega.*\n\n"
-        "⏳ Admin review kar raha hai...\n"
-        "🔔 Jab approve hoga, aapko fee payment ka message mil jayega.",
+        "✅ *Your information has been successfully submitted!*\n\n"
+        "🕐 *Please wait for admin review...*\n\n"
+        "⏳ Your application is under review.\n"
+        "🔔 Once approved, you will receive a message for fee payment.",
         parse_mode=ParseMode.MARKDOWN
     )
     
@@ -394,10 +509,10 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📋 *Type:* {user_data[5]}
 📝 *Name:* {user_data[2]}
 📧 *Email:* {user_data[3]}
-📱 *WhatsApp:* {whatsapp}
+📱 *WhatsApp:* {cleaned_number}
 ⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 *Action karein:*
+👇 *Please take action:*
     """
     
     # Send proof photo if available
@@ -428,9 +543,10 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = int(query.data.split('_')[1])
     
-    # Update status
+    # Update status and set approval time
     update_user(user_id, 'status', 'payment_pending')
     update_step(user_id, 'payment_pending')
+    set_admin_approved_time(user_id)  # Track when admin approved
     
     # Send fee message to user
     keyboard = [
@@ -443,19 +559,22 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"""
 🎉 *APPLICATION APPROVED!*
 
-✅ Admin ne aapki application *verify* kar li hai!
+✅ Admin has *verified* your application!
 
-💎 *Premium Group Join Karne Ke Liye Lifetime Fee:*
+💎 *To join the Premium Group, Lifetime Fee:*
 💵 *{MEMBERSHIP_FEE}*
 
-👇 *Payment method select karein:*
+⚠️ *Important:* You will receive payment reminders every 24 hours until payment is completed.
+
+👇 *Please select your payment method:*
         """,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
     
     await query.edit_message_text(
-        f"✅ *Approved!*\n\nUser `{user_id}` ko fee message bhej diya.",
+        f"✅ *Approved!*\n\nFee message sent to user `{user_id}`.\n"
+        f"⏰ Automatic reminders will be sent every {REMINDER_INTERVAL_HOURS} hours.",
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -469,7 +588,7 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"❌ *Rejecting user {user_id}*\n\n"
-        f"*Reason bataiye (message bhejein):*",
+        f"*Please provide rejection reason (send message):*",
         parse_mode=ParseMode.MARKDOWN
     )
     return ADMIN_REVIEW
@@ -489,11 +608,11 @@ async def handle_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"""
 ❌ *APPLICATION REJECTED*
 
-Aapki application reject kar di gayi hai.
+Your application has been rejected.
 
 *Reason:* {reason}
 
-Dubara apply karne ke liye /start karein.
+To apply again, please send /start.
         """,
         parse_mode=ParseMode.MARKDOWN
     )
@@ -523,7 +642,7 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
 💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ *Payment karne ke baad screenshot yahan bhejein.*
+✅ *After payment, please send screenshot here.*
         """
     else:
         details = f"""
@@ -534,7 +653,7 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
 💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ *Payment karne ke baad screenshot yahan bhejein.*
+✅ *After payment, please send screenshot here.*
         """
     
     await context.bot.send_message(
@@ -564,7 +683,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     
     if not update.message.photo:
         await update.message.reply_text(
-            "❌ *Please payment ka screenshot bhejiye!*",
+            "❌ *Please send payment screenshot!*",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -580,7 +699,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     duplicate = check_duplicate(image_hash)
     if duplicate:
         await update.message.reply_text(
-            "🚫 *YE SCREENSHOT PEHLE USE HO CHUKA HAI!*",
+            "🚫 *THIS SCREENSHOT HAS ALREADY BEEN USED!*",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -599,9 +718,9 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     # Confirm to user
     await update.message.reply_text(
         "⏳ *Payment Screenshot Received!*\n\n"
-        "✅ Admin verify kar raha hai...\n"
-        "🕐 *Approval ke baad aapko group link mil jayega.*\n\n"
-        "⚠️ *Fake screenshot par ban lag sakta hai!*",
+        "✅ Admin is verifying your payment...\n"
+        "🕐 *You will receive group links after approval.*\n\n"
+        "⚠️ *Fake screenshots will result in a ban!*",
         parse_mode=ParseMode.MARKDOWN
     )
     
@@ -624,7 +743,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
 💳 *Method:* {user_data[8]}
 ⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 *Verify karein:*
+👇 *Please verify:*
     """
     
     await context.bot.send_photo(
@@ -651,7 +770,7 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"""
 🎉 *PAYMENT APPROVED!*
 
-✅ Aapki payment verify ho gayi hai!
+✅ Your payment has been verified!
 
 🔗 *TELEGRAM GROUP:*
 {TELEGRAM_GROUP_LINK}
@@ -660,9 +779,9 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {WHATSAPP_GROUP_LINK}
 
 ⚠️ *Important:*
-• Links share nahi karein
-• Group rules follow karein
-• Fake members add nahi karein
+• Do not share these links
+• Follow group rules
+• Do not add fake members
 
 🚀 *Welcome to Premium Family!*
         """,
@@ -686,17 +805,160 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"❌ *Rejecting payment {user_id}*\n\n"
-        f"*Reason bataiye:*",
+        f"*Please provide rejection reason:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return FINAL_APPROVAL
+
+# ============= REMINDER SYSTEM =============
+
+async def send_payment_reminders(context: ContextTypes.DEFAULT_TYPE):
+    """Background task to send reminders at exactly 24, 48, 72... hours"""
+    try:
+        pending_users = get_pending_payment_users()
+        
+        if not pending_users:
+            return
+        
+        logger.info(f"Sending reminders to {len(pending_users)} users (24h multiples)")
+        
+        for user in pending_users:
+            user_id = user[0]
+            username = user[1] or "Unknown"
+            full_name = user[2] or "User"
+            reminder_count = user[5] if len(user) > 5 else 0
+            
+            try:
+                keyboard = [
+                    [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
+                    [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
+                ]
+                
+                # Calculate hours elapsed
+                hours_elapsed = (reminder_count + 1) * REMINDER_INTERVAL_HOURS
+                
+                # Add urgency based on reminder count
+                if reminder_count == 0:
+                    urgency = "⏰ *24 Hour Reminder*"
+                    message = f"Friendly reminder: Your payment is pending."
+                elif reminder_count == 1:
+                    urgency = "⚠️ *48 Hour Reminder*"
+                    message = "Your payment has been pending for 2 days. Please complete soon."
+                elif reminder_count == 2:
+                    urgency = "🔔 *72 Hour Reminder*"
+                    message = "3 days have passed. Complete your payment now to avoid cancellation."
+                else:
+                    urgency = f"🚨 *{hours_elapsed} Hour Reminder - URGENT!*"
+                    message = f"Your payment has been pending for {hours_elapsed//24} days. This is your final reminder!"
+                
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"""
+{urgency}
+
+Hello {full_name},
+
+{message}
+
+✅ Your application was *approved by admin* but payment is still pending!
+
+💎 *Premium Group Access Waiting...*
+💵 *Fee:* {MEMBERSHIP_FEE}
+
+⏳ *Time elapsed:* {hours_elapsed} hours ({hours_elapsed//24} days)
+
+👇 *Complete your payment now:*
+                    """,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+                # Update reminder sent time
+                update_reminder_sent(user_id)
+                logger.info(f"Reminder sent to user {user_id} ({username}) - Count: {reminder_count + 1}, Hours: {hours_elapsed}")
+                
+            except Exception as e:
+                logger.error(f"Failed to send reminder to user {user_id}: {e}")
+                continue
+        
+        # Send summary to admin
+        if pending_users:
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"""
+📊 *Hourly Reminder Summary*
+
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+📋 *Reminders sent:* {len(pending_users)} users
+⏱ *Interval:* Every {REMINDER_INTERVAL_HOURS} hours (24h, 48h, 72h...)
+
+💳 *Total pending payments:* Check with /pending command
+
+✅ Reminders continue until payment is received.
+                    """,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logger.error(f"Failed to send admin summary: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error in reminder task: {e}")
+
+async def check_pending_payments_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to check pending payments"""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ Unauthorized!")
+        return
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''SELECT user_id, username, full_name, admin_approved_at, reminder_count 
+                 FROM users 
+                 WHERE status = 'payment_pending' 
+                 ORDER BY admin_approved_at''')
+    results = c.fetchall()
+    conn.close()
+    
+    if not results:
+        await update.message.reply_text("✅ No pending payments!")
+        return
+    
+    message = f"⏳ *Pending Payments ({len(results)} users):*\n\n"
+    
+    for user in results:
+        uid = user[0]
+        uname = user[1] or "No username"
+        name = user[2] or "Unknown"
+        approved_at = user[3]
+        reminders = user[4] if len(user) > 4 else 0
+        
+        # Calculate hours since approval
+        try:
+            if isinstance(approved_at, str):
+                approved_time = datetime.strptime(approved_at, '%Y-%m-%d %H:%M:%S.%f')
+            else:
+                approved_time = approved_at
+            hours_ago = int((datetime.now() - approved_time).total_seconds() / 3600)
+            days = hours_ago // 24
+        except:
+            hours_ago = "Unknown"
+            days = "Unknown"
+        
+        message += f"👤 @{uname} (ID: `{uid}`)\n"
+        message += f"   Name: {name}\n"
+        message += f"   Reminders sent: {reminders}\n"
+        message += f"   Pending for: {days} days ({hours_ago} hours)\n\n"
+    
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 # ============= CANCEL =============
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel"""
     await update.message.reply_text(
-        "❌ Cancelled.\nDubara shuru karne ke liye /start karein."
+        "❌ Cancelled.\nTo start again, send /start."
     )
     return ConversationHandler.END
 
@@ -729,10 +991,28 @@ def main():
     application.add_handler(CallbackQueryHandler(final_approve, pattern='^finallink_'))
     application.add_handler(CallbackQueryHandler(reject_payment, pattern='^rejectpay_'))
     
+    # Admin commands
+    application.add_handler(CommandHandler("pending", check_pending_payments_command))
+    
     # Payment proof handler
     application.add_handler(MessageHandler(filters.PHOTO, receive_payment_proof))
     
-    print("🤖 Bot chal raha hai...")
+    # Setup scheduler for reminders
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        send_payment_reminders,
+        IntervalTrigger(minutes=CHECK_INTERVAL_MINUTES),
+        args=[application],
+        id='payment_reminder_job',
+        name='Payment Reminder Job',
+        replace_existing=True
+    )
+    scheduler.start()
+    
+    print("🤖 Bot is running...")
+    print(f"⏰ Payment reminders: Every {REMINDER_INTERVAL_HOURS} hours (24h, 48h, 72h...)")
+    print(f"🔍 Checking every {CHECK_INTERVAL_MINUTES} minutes")
+    
     application.run_polling()
 
 if __name__ == "__main__":
