@@ -3,10 +3,13 @@ import sqlite3
 import hashlib
 import os
 import re
+import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from telegram.constants import ParseMode
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 # ============= CONFIGURATION =============
 
@@ -14,12 +17,13 @@ BOT_TOKEN = "8535390425:AAGdysiGhg5y82rCLkVi2t2yJGGhCXXlnIY"
 ADMIN_ID = 7291034213  # YOUR_TELEGRAM_ID_HERE
 
 # GROUP LINKS
-TELEGRAM_GROUP_LINK = "https://t.me/YOUR_TELEGRAM_GROUP_LINK"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK"
+TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
 
 # PAYMENT DETAILS
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
 BINANCE_ID = "1129541950"
+BINANCE_NETWORK = "TRC20"
+Address = "TWzf9VJmr2mhq5H8Xa3bLhbb8dwmWdG9B7"
 
 EASYPAYSA_NAME = "Jaffar Ali"
 EASYPAYSA_NUMBER = "03486623402"
