@@ -37,10 +37,9 @@ def init_db():
         whatsapp TEXT,
         request_type TEXT,
         proof_file_id TEXT,
-        current_step TEXT DEFAULT 'start',
         payment_file_id TEXT,
+        current_step TEXT DEFAULT 'start',
         status TEXT DEFAULT 'new',
-        admin_approved INTEGER DEFAULT 0,
         created_at TIMESTAMP,
         updated_at TIMESTAMP
     )''')
@@ -76,81 +75,11 @@ def update_user(user_id, field, value):
     conn.commit()
     conn.close()
 
-# ================= PROFESSIONAL MESSAGES =================
-
-WELCOME_MESSAGE = """
-━━━━━━━━━━━━━━━━━━━━━━
-🎓 PREMIUM ACCESS PORTAL
-━━━━━━━━━━━━━━━━━━━━━━
-
-Welcome {name},
-
-To maintain community quality, we verify all customers before granting access.
-
-━━━━━━━━━━━━━━━━━━━━━━
-📌 SELECT YOUR PURCHASE TYPE
-━━━━━━━━━━━━━━━━━━━━━━
-"""
-
-STEP1 = """
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 1 OF 4 — FULL NAME
-━━━━━━━━━━━━━━━━━━━━━━
-Enter your complete name used during purchase.
-"""
-
-STEP2 = """
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 2 OF 4 — EMAIL CONFIRMATION
-━━━━━━━━━━━━━━━━━━━━━━
-Enter the SAME email used for registration.
-"""
-
-STEP3 = """
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 3 OF 4 — PURCHASE PROOF
-━━━━━━━━━━━━━━━━━━━━━━
-Upload a clear screenshot of your receipt.
-"""
-
-STEP4 = """
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 4 OF 4 — WHATSAPP NUMBER
-━━━━━━━━━━━━━━━━━━━━━━
-Enter your WhatsApp number with country code.
-Example: +923001234567
-"""
-
-SUBMITTED = """
-━━━━━━━━━━━━━━━━━━━━━━
-✅ APPLICATION SUBMITTED
-━━━━━━━━━━━━━━━━━━━━━━
-Your request is under admin review.
-Estimated time: 2–24 hours.
-"""
-
-SUCCESS_MESSAGE = """
-━━━━━━━━━━━━━━━━━━━━━━
-🏆 PREMIUM MEMBERSHIP ACTIVATED
-━━━━━━━━━━━━━━━━━━━━━━
-
-Your payment has been verified successfully.
-
-🔐 Private Access Links:
-
-Telegram:
-{telegram_link}
-
-WhatsApp:
-{whatsapp_link}
-
-Welcome to the Inner Circle.
-"""
-
 # ================= BOT =================
 
 async def start(update: Update, context):
     user = update.effective_user
+
     if not get_user(user.id):
         create_user(user.id, user.username or "NoUsername")
 
@@ -167,7 +96,10 @@ async def start(update: Update, context):
 
 Welcome {user.first_name},
 
-Please select your purchase type.
+To maintain community quality,
+we verify every customer before granting access.
+
+Select your purchase type below:
 """,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -177,11 +109,26 @@ async def handle_callback(update: Update, context):
     await query.answer()
     data = query.data
 
-    # Admin approve initial info
+    # 1️⃣ TYPE SELECTION
+    if data.startswith("type_"):
+        user_id = query.from_user.id
+        purchase_type = "Premium Subscription" if "premium" in data else "Product Purchase"
+
+        update_user(user_id, "request_type", purchase_type)
+        update_user(user_id, "current_step", "name_pending")
+
+        await query.edit_message_text("""
+━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 OF 4 — FULL NAME
+━━━━━━━━━━━━━━━━━━━━━━
+
+Enter your complete name used during purchase.
+""")
+        return
+
+    # 2️⃣ ADMIN APPROVE INITIAL INFO
     if data.startswith("approve_"):
         user_id = int(data.split("_")[1])
-
-        update_user(user_id, "admin_approved", 1)
         update_user(user_id, "status", "payment_pending")
 
         keyboard = [
@@ -196,23 +143,23 @@ async def handle_callback(update: Update, context):
 ✅ APPLICATION APPROVED
 ━━━━━━━━━━━━━━━━━━━━━━
 
-Please complete payment.
+Please complete your membership payment.
 
 Amount: {MEMBERSHIP_FEE}
 
-After payment upload screenshot here.
+After payment, upload screenshot here.
 """,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_reply_markup(None)
         return
 
-    # Payment method
+    # 3️⃣ PAYMENT METHOD
     if data.startswith("pay_"):
         if "binance" in data:
             text = f"""
-BINANCE PAYMENT
+💰 BINANCE PAYMENT
 
 Email: {BINANCE_EMAIL}
 ID: {BINANCE_ID}
@@ -223,7 +170,7 @@ Upload payment screenshot after sending.
 """
         else:
             text = f"""
-EASYPAYSA PAYMENT
+📱 EASYPAYSA PAYMENT
 
 Name: {EASYPAYSA_NAME}
 Number: {EASYPAYSA_NUMBER}
@@ -234,21 +181,32 @@ Upload payment screenshot after sending.
         await query.edit_message_text(text)
         return
 
-    # Final approve payment
+    # 4️⃣ FINAL APPROVE PAYMENT
     if data.startswith("final_"):
         user_id = int(data.split("_")[1])
         update_user(user_id, "status", "completed")
 
         await context.bot.send_message(
             chat_id=user_id,
-            text=SUCCESS_MESSAGE.format(
-                telegram_link=TELEGRAM_GROUP_LINK,
-                whatsapp_link=WHATSAPP_GROUP_LINK
-            ),
+            text=f"""
+━━━━━━━━━━━━━━━━━━━━━━
+🏆 PREMIUM MEMBERSHIP ACTIVATED
+━━━━━━━━━━━━━━━━━━━━━━
+
+Your payment has been verified.
+
+Telegram:
+{TELEGRAM_GROUP_LINK}
+
+WhatsApp:
+{WHATSAPP_GROUP_LINK}
+
+Welcome to the Inner Circle.
+""",
             parse_mode=ParseMode.MARKDOWN
         )
 
-        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_reply_markup(None)
         return
 
 async def handle_text(update: Update, context):
@@ -259,12 +217,12 @@ async def handle_text(update: Update, context):
     if not user:
         return
 
-    step = user[7]
+    step = user[8]
 
     if step == "name_pending":
         update_user(user_id, "full_name", text)
         update_user(user_id, "current_step", "email_pending")
-        await update.message.reply_text("Enter your email:")
+        await update.message.reply_text("Enter your email used during purchase:")
         return
 
     if step == "email_pending":
@@ -279,7 +237,13 @@ async def handle_text(update: Update, context):
 
         updated = get_user(user_id)
 
-        await update.message.reply_text("Application submitted. Await admin review.")
+        await update.message.reply_text("""
+━━━━━━━━━━━━━━━━━━━━━━
+✅ APPLICATION SUBMITTED
+━━━━━━━━━━━━━━━━━━━━━━
+
+Your information has been forwarded for admin review.
+""")
 
         keyboard = [[
             InlineKeyboardButton("✅ APPROVE", callback_data=f"approve_{user_id}")
@@ -297,9 +261,6 @@ Name: {updated[2]}
 Email: {updated[3]}
 WhatsApp: {updated[4]}
 Type: {updated[5]}
-
-━━━━━━━━━━━━━━━━━━━━━━
-Proof attached above.
 """
 
         if updated[6]:
@@ -323,49 +284,38 @@ async def handle_photo(update: Update, context):
     if not user:
         return
 
-    step = user[7]
+    step = user[8]
     status = user[9]
 
-    # First purchase proof
+    # Purchase proof
     if step == "proof_pending":
         update_user(user_id, "proof_file_id", update.message.photo[-1].file_id)
         update_user(user_id, "current_step", "whatsapp_pending")
-        await update.message.reply_text("Now enter WhatsApp number:")
+        await update.message.reply_text("Now enter your WhatsApp number:")
         return
 
-    # Payment screenshot
+    # Payment proof
     if status == "payment_pending":
         file_id = update.message.photo[-1].file_id
         update_user(user_id, "payment_file_id", file_id)
 
-        await update.message.reply_text("Payment received. Under review.")
-
-        updated = get_user(user_id)
+        await update.message.reply_text("Payment screenshot received. Under review.")
 
         keyboard = [[
             InlineKeyboardButton("✅ APPROVE & SEND LINKS", callback_data=f"final_{user_id}")
         ]]
 
-        admin_text = f"""
-━━━━━━━━━━━━━━━━━━━━━━
-💰 PAYMENT VERIFICATION
-━━━━━━━━━━━━━━━━━━━━━━
-
-User: @{updated[1]}
-ID: {user_id}
-
-Name: {updated[2]}
-Email: {updated[3]}
-WhatsApp: {updated[4]}
-
-━━━━━━━━━━━━━━━━━━━━━━
-Payment screenshot attached above.
-"""
-
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=file_id,
-            caption=admin_text,
+            caption=f"""
+💰 PAYMENT VERIFICATION
+
+User: @{user[1]}
+ID: {user_id}
+Name: {user[2]}
+Email: {user[3]}
+""",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -377,7 +327,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    print("Professional Premium Bot Running...")
+    print("Premium Professional Bot Running...")
     app.run_polling()
 
 if __name__ == "__main__":
