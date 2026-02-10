@@ -26,7 +26,6 @@ MEMBERSHIP_FEE = "$5 USD (Lifetime)"
 
 # ========================================
 
-# Premium Logging Setup
 logging.basicConfig(
     format='%(asctime)s │ %(name)s │ %(levelname)s │ %(message)s',
     level=logging.INFO,
@@ -120,259 +119,198 @@ def save_hash(file_hash, user_id):
     finally:
         conn.close()
 
-# ============= LUXURY UI COMPONENTS =============
+# ============= LUXURY UI =============
 
 class LuxuryUI:
-    """Premium UI Components for VIP Experience"""
-    
-    # Premium emojis collection
     EMOJIS = {
-        'crown': '👑',
-        'diamond': '💎',
-        'star': '⭐',
-        'sparkles': '✨',
-        'fire': '🔥',
-        'rocket': '🚀',
-        'crown_gold': '🤴',
-        'shield': '🛡️',
-        'key': '🔐',
-        'door': '🚪',
-        'vip': '🎖️',
-        'medal': '🏆',
-        'money_bag': '💰',
-        'credit_card': '💳',
-        'phone': '📱',
-        'email': '📧',
-        'id': '🆔',
-        'globe': '🌐',
-        'check': '✅',
-        'cross': '❌',
-        'warning': '⚠️',
-        'info': 'ℹ️',
-        'clock': '⏰',
-        'hourglass': '⏳',
-        'bell': '🔔',
-        'lock': '🔒',
-        'unlock': '🔓',
-        'arrow_right': '➤',
-        'arrow_forward': '→',
-        'bullet': '•',
-        'divider': '━━━━━━━━━━━━━━━',
-        'double_divider': '╔═══════════════════╗\n╚═══════════════════╝',
-        'corner_tl': '╔',
-        'corner_tr': '╗',
-        'corner_bl': '╚',
-        'corner_br': '╝',
-        'line_h': '═',
-        'line_v': '║',
-        'bullet_star': '✦',
-        'bullet_diamond': '◆',
-        'bullet_arrow': '▸'
+        'crown': '👑', 'diamond': '💎', 'star': '⭐', 'sparkles': '✨',
+        'fire': '🔥', 'rocket': '🚀', 'shield': '🛡️', 'key': '🔐',
+        'vip': '🎖️', 'medal': '🏆', 'money_bag': '💰', 'phone': '📱',
+        'email': '📧', 'id': '🆔', 'check': '✅', 'cross': '❌',
+        'warning': '⚠️', 'info': 'ℹ️', 'clock': '⏰', 'hourglass': '⏳',
+        'bullet': '•', 'arrow': '➤', 'divider': '━━━━━━━━━━━━━━━'
     }
     
     @staticmethod
-    def luxury_box(title, content, width=40):
-        """Create a luxury bordered box"""
+    def button(text, callback_data, emoji='💎'):
+        return InlineKeyboardButton(f"{emoji} {text}", callback_data=callback_data)
+    
+    @staticmethod
+    def box(title, content, width=40):
         top = f"╔{'═' * (width-2)}╗"
         title_line = f"║{title.center(width-2)}║"
-        separator = f"╠{'═' * (width-2)}╣"
+        sep = f"╠{'═' * (width-2)}╣"
         bottom = f"╚{'═' * (width-2)}╝"
         
-        lines = content.split('\n')
-        content_lines = []
-        for line in lines:
+        lines = []
+        for line in content.split('\n'):
             if len(line) > width-4:
-                # Truncate long lines
                 line = line[:width-7] + "..."
-            content_lines.append(f"║ {line.ljust(width-4)} ║")
+            lines.append(f"║ {line.ljust(width-4)} ║")
         
-        return f"{top}\n{title_line}\n{separator}\n" + '\n'.join(content_lines) + f"\n{bottom}"
-    
-    @staticmethod
-    def status_banner(status):
-        """Premium status banners"""
-        banners = {
-            'new': f"{LuxuryUI.EMOJIS['star']} NEW MEMBER",
-            'pending': f"{LuxuryUI.EMOJIS['hourglass']} UNDER REVIEW",
-            'approved': f"{LuxuryUI.EMOJIS['crown']} APPROVED",
-            'rejected': f"{LuxuryUI.EMOJIS['cross']} DECLINED",
-            'completed': f"{LuxuryUI.EMOJIS['medal']} VERIFIED MEMBER",
-            'payment_pending': f"{LuxuryUI.EMOJIS['money_bag']} PAYMENT REQUIRED",
-            'payment_verification': f"{LuxuryUI.EMOJIS['clock']} VERIFYING PAYMENT"
-        }
-        return banners.get(status, status.upper())
-    
-    @staticmethod
-    def gradient_text(text, style='gold'):
-        """Simulate gradient with Unicode"""
-        if style == 'gold':
-            return f"✨ {text} ✨"
-        elif style == 'vip':
-            return f"👑 {text} 👑"
-        elif style == 'alert':
-            return f"🔔 {text} 🔔"
-        return text
-    
-    @staticmethod
-    def button(text, callback_data, style='premium'):
-        """Premium styled buttons"""
-        styles = {
-            'premium': ('💎', 'primary'),
-            'gold': ('👑', 'success'),
-            'silver': ('🥈', 'secondary'),
-            'danger': ('🚫', 'danger'),
-            'success': ('✨', 'success'),
-            'warning': ('⚡', 'warning')
-        }
-        emoji, _ = styles.get(style, ('💎', 'primary'))
-        return InlineKeyboardButton(f"{emoji} {text}", callback_data=callback_data)
+        return f"{top}\n{title_line}\n{sep}\n" + '\n'.join(lines) + f"\n{bottom}"
 
-# ============= PREMIUM MESSAGE TEMPLATES =============
+# ============= MESSAGE TEMPLATES =============
 
-class MessageTemplates:
-    """High-quality message templates"""
+class Messages:
     
     @staticmethod
     def welcome(first_name):
         return f"""
-{LuxuryUI.EMOJIS['crown']} <b>WELCOME TO THE ELITE</b> {LuxuryUI.EMOJIS['crown']}
+{LuxuryUI.EMOJIS['crown']} <b>PREMIUM SUPPORT BOT</b> {LuxuryUI.EMOJIS['crown']}
 
-Greetings, <b>{first_name}</b>! 
+Assalam-o-Alaikum, <b>{first_name}</b>!
 
-{LuxuryUI.EMOJIS['sparkles']} You are about to enter an <b>Exclusive Premium Community</b> {LuxuryUI.EMOJIS['sparkles']}
+{LuxuryUI.box('WELCOME MESSAGE', '''Premium support ke liye hum aap ko welcome karte hain. Agar aap hamari Premium community ke andar join hona chahte hain, to hum aap se kuch information lenge.
 
-{LuxuryUI.EMOJIS['divider']}
+Jaldbaazi mein galat information submit na karein. Agar form reject ho gaya, to dobara apply nahi kar saken ge.
 
-<b>What awaits you inside:</b>
-{LuxuryUI.EMOJIS['bullet_diamond']} VIP Access to Premium Groups
-{LuxuryUI.EMOJIS['bullet_diamond']} Exclusive Content & Resources  
-{LuxuryUI.EMOJIS['bullet_diamond']} Direct Support & Networking
-{LuxuryUI.EMOJIS['bullet_diamond']} Lifetime Membership Benefits
+Community mein aap ko complete premium support milegi. Har Sunday raat ko live class hogi jisme aap ke issues solve honge.''')}
 
-{LuxuryUI.EMOJIS['divider']}
-
-<i>Please select your membership type below to begin verification:</i>
+{LuxuryUI.EMOJIS['arrow']} <b>Select membership type:</b>
 """
     
     @staticmethod
-    def step_header(step_num, total_steps, title):
+    def step(step_num, total, title, instruction):
         return f"""
-{LuxuryUI.EMOJIS['diamond']} <b>VERIFICATION STEP {step_num}/{total_steps}</b> {LuxuryUI.EMOJIS['diamond']}
-
-<b>{title}</b>
+{LuxuryUI.EMOJIS['diamond']} <b>STEP {step_num}/{total}: {title}</b> {LuxuryUI.EMOJIS['diamond']}
 
 {LuxuryUI.EMOJIS['divider']}
+
+{instruction}
+
+{LuxuryUI.EMOJIS['warning']} <i>Galat information se form reject ho sakta hai</i>
 """
     
     @staticmethod
-    def payment_info(method):
-        if method == 'binance':
-            return f"""
-{LuxuryUI.EMOJIS['money_bag']} <b>SECURE PAYMENT GATEWAY</b> {LuxuryUI.EMOJIS['money_bag']}
+    def payment_binance():
+        return f"""
+{LuxuryUI.EMOJIS['money_bag']} <b>PAYMENT DETAILS - BINANCE</b> {LuxuryUI.EMOJIS['money_bag']}
 
-{LuxuryUI.luxury_box('BINANCE PAYMENT DETAILS', f'''
+{LuxuryUI.box('TRANSFER INFO', f'''
 Amount: {MEMBERSHIP_FEE}
-Network: TRC20 (Tron)
+Network: TRC20
 
 Email: {BINANCE_EMAIL}
 ID: {BINANCE_ID}
 
-Status: Awaiting Transfer...
-''', 42)}
+Status: Waiting...
+''')}
 
-{LuxuryUI.EMOJIS['warning']} <i>Please send exact amount to avoid delays</i>
-{LuxuryUI.EMOJIS['info']} Screenshot required after payment
+{LuxuryUI.EMOJIS['warning']} Exact amount bhejein
+{LuxuryUI.EMOJIS['info']} Payment ke baad screenshot bhejein
 """
-        else:
-            return f"""
-{LuxuryUI.EMOJIS['phone']} <b>SECURE PAYMENT GATEWAY</b> {LuxuryUI.EMOJIS['phone']}
+    
+    @staticmethod
+    def payment_easypaisa():
+        return f"""
+{LuxuryUI.EMOJIS['phone']} <b>PAYMENT DETAILS - EASYPAYSA</b> {LuxuryUI.EMOJIS['phone']}
 
-{LuxuryUI.luxury_box('EASYPAYSA DETAILS', f'''
+{LuxuryUI.box('TRANSFER INFO', f'''
 Amount: {MEMBERSHIP_FEE}
 
-Account: {EASYPAYSA_NAME}
+Name: {EASYPAYSA_NAME}
 Number: {EASYPAYSA_NUMBER}
 
-Status: Awaiting Transfer...
-''', 42)}
+Status: Waiting...
+''')}
 
-{LuxuryUI.EMOJIS['warning']} <i>Please send exact amount to avoid delays</i>
-{LuxuryUI.EMOJIS['info']} Screenshot required after payment
+{LuxuryUI.EMOJIS['warning']} Exact amount bhejein
+{LuxuryUI.EMOJIS['info']} Payment ke baad screenshot bhejein
 """
     
     @staticmethod
-    def admin_notification(user_data, whatsapp, is_payment=False):
-        if is_payment:
-            return f"""
-{LuxuryUI.EMOJIS['money_bag']} <b>PAYMENT VERIFICATION QUEUE</b> {LuxuryUI.EMOJIS['money_bag']}
-
-{LuxuryUI.EMOJIS['divider']}
-
-<b>Member Details:</b>
-{LuxuryUI.EMOJIS['bullet']} User: @{user_data[1] or 'N/A'}
-{LuxuryUI.EMOJIS['bullet']} ID: <code>{user_data[0]}</code>
-{LuxuryUI.EMOJIS['bullet']} Name: {user_data[2]}
-{LuxuryUI.EMOJIS['bullet']} Method: {user_data[8]}
-
-{LuxuryUI.EMOJIS['divider']}
-
-<i>Please verify payment screenshot and take action:</i>
-"""
-        else:
-            return f"""
-{LuxuryUI.EMOJIS['star']} <b>NEW MEMBER APPLICATION</b> {LuxuryUI.EMOJIS['star']}
-
-{LuxuryUI.EMOJIS['divider']}
-
-<b>Applicant Information:</b>
-{LuxuryUI.EMOJIS['bullet']} Username: @{user_data[1] or 'N/A'}
-{LuxuryUI.EMOJIS['bullet']} User ID: <code>{user_data[0]}</code>
-{LuxuryUI.EMOJIS['bullet']} Full Name: {user_data[2]}
-{LuxuryUI.EMOJIS['bullet']} Email: {user_data[3]}
-{LuxuryUI.EMOJIS['bullet']} WhatsApp: <code>{whatsapp}</code>
-{LuxuryUI.EMOJIS['bullet']} Type: {user_data[5]}
-
-{LuxuryUI.EMOJIS['divider']}
-
-<i>Review application and approve for payment:</i>
-"""
-    
-    @staticmethod
-    def success_access():
+    def approved():
         return f"""
-{LuxuryUI.EMOJIS['medal']} <b>WELCOME TO THE ELITE CIRCLE</b> {LuxuryUI.EMOJIS['medal']}
+{LuxuryUI.EMOJIS['medal']} <b>MUBARAK HO! APPROVED</b> {LuxuryUI.EMOJIS['medal']}
 
-{LuxuryUI.EMOJIS['fire']} <b>VERIFICATION COMPLETE!</b> {LuxuryUI.EMOJIS['fire']}
+{LuxuryUI.EMOJIS['check']} Aap ka application approve ho gaya hai!
+
+Ab aap ne payment complete karni hai. Neeche options select karein:
+"""
+    
+    @staticmethod
+    def verifying():
+        return f"""
+{LuxuryUI.EMOJIS['clock']} <b>PAYMENT VERIFY HO RAHI HAI</b> {LuxuryUI.EMOJIS['clock']}
 
 {LuxuryUI.EMOJIS['divider']}
 
-<b>Your Exclusive Access:</b>
+Aap ki payment receive ho gayi hai.
+Verification process mein 5-10 minute lagenge.
 
-{LuxuryUI.EMOJIS['diamond']} <b>Telegram VIP Group:</b>
+{LuxuryUI.EMOJIS['info']} Bar bar message na karein
+"""
+    
+    @staticmethod
+    def access_granted():
+        return f"""
+{LuxuryUI.EMOJIS['trophy']} <b>WELCOME TO ELITE CIRCLE!</b> {LuxuryUI.EMOJIS['trophy']}
+
+{LuxuryUI.EMOJIS['fire']} Aap ko premium access mil gaya hai! {LuxuryUI.EMOJIS['fire']}
+
+{LuxuryUI.box('YOUR ACCESS LINKS', f'''
+TELEGRAM GROUP:
 {TELEGRAM_GROUP_LINK}
 
-{LuxuryUI.EMOJIS['phone']} <b>WhatsApp Elite Circle:</b>
+WHATSAPP GROUP:
 {WHATSAPP_GROUP_LINK}
 
-{LuxuryUI.EMOJIS['divider']}
+SUNDAY LIVE CLASS:
+Raat ko timings announce ki jayengi
+''')}
 
-{LuxuryUI.EMOJIS['shield']} <b>Security Notice:</b>
-These links are exclusive to you. Sharing will result in immediate ban.
-
-{LuxuryUI.EMOJIS['rocket']} <b>Your journey begins now!</b>
+{LuxuryUI.EMOJIS['shield']} Links share karne par ban hoga
+{LuxuryUI.EMOJIS['rocket']} Aap ki journey shuru ho gayi hai!
 """
     
     @staticmethod
-    def action_taken(action, timestamp=None):
-        time_str = timestamp or datetime.now().strftime('%H:%M:%S')
+    def admin_new_application(user_data, whatsapp):
+        return f"""
+{LuxuryUI.EMOJIS['star']} <b>NEW APPLICATION</b> {LuxuryUI.EMOJIS['star']}
+
+{LuxuryUI.EMOJIS['divider']}
+
+<b>User:</b> @{user_data[1] or 'N/A'}
+<b>ID:</b> <code>{user_data[0]}</code>
+<b>Name:</b> {user_data[2]}
+<b>Email:</b> {user_data[3]}
+<b>WhatsApp:</b> <code>{whatsapp}</code>
+<b>Type:</b> {user_data[5]}
+
+{LuxuryUI.EMOJIS['divider']}
+
+<i>Review and approve:</i>
+"""
+    
+    @staticmethod
+    def admin_payment_verify(user_data):
+        return f"""
+{LuxuryUI.EMOJIS['money_bag']} <b>PAYMENT VERIFICATION</b> {LuxuryUI.EMOJIS['money_bag']}
+
+{LuxuryUI.EMOJIS['divider']}
+
+<b>User:</b> @{user_data[1] or 'N/A'}
+<b>ID:</b> <code>{user_data[0]}</code>
+<b>Name:</b> {user_data[2]}
+<b>Method:</b> {user_data[8]}
+
+{LuxuryUI.EMOJIS['divider']}
+
+<i>Verify payment:</i>
+"""
+    
+    @staticmethod
+    def action_taken(action, time_str=None):
+        t = time_str or datetime.now().strftime('%H:%M:%S')
         if action == 'approved':
-            return f"\n\n{LuxuryUI.EMOJIS['check']} <b>ACTION COMPLETED</b> {LuxuryUI.EMOJIS['check']}\n<i>Approved at {time_str} • User notified</i>"
+            return f"\n\n{LuxuryUI.EMOJIS['check']} <b>APPROVED</b> at {t}\nUser notified ✅"
         elif action == 'rejected':
-            return f"\n\n{LuxuryUI.EMOJIS['cross']} <b>ACTION COMPLETED</b> {LuxuryUI.EMOJIS['cross']}\n<i>Rejected at {time_str} • User notified</i>"
-        elif action == 'payment_approved':
-            return f"\n\n{LuxuryUI.EMOJIS['medal']} <b>PAYMENT VERIFIED</b> {LuxuryUI.EMOJIS['medal']}\n<i>Verified at {time_str} • Access granted</i>"
+            return f"\n\n{LuxuryUI.EMOJIS['cross']} <b>REJECTED</b> at {t}\nUser notified ✅"
+        elif action == 'payment_verified':
+            return f"\n\n{LuxuryUI.EMOJIS['medal']} <b>PAYMENT VERIFIED</b> at {t}\nAccess granted ✅"
         elif action == 'payment_rejected':
-            return f"\n\n{LuxuryUI.EMOJIS['cross']} <b>PAYMENT REJECTED</b> {LuxuryUI.EMOJIS['cross']}\n<i>Rejected at {time_str} • Awaiting reason</i>"
+            return f"\n\n{LuxuryUI.EMOJIS['cross']} <b>PAYMENT REJECTED</b> at {t}"
 
 # ============= BOT FUNCTIONS =============
 
@@ -387,12 +325,12 @@ async def start(update: Update, context):
         create_user(user_id, user.username or "No username")
         
         keyboard = [
-            [LuxuryUI.button("Premium Subscription", "premium", "gold")],
-            [LuxuryUI.button("Product Purchase", "product", "silver")]
+            [LuxuryUI.button("Premium Subscription", "premium", "👑")],
+            [LuxuryUI.button("Product Purchase", "product", "🛒")]
         ]
         
         await update.message.reply_text(
-            MessageTemplates.welcome(first_name),
+            Messages.welcome(first_name),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -402,234 +340,180 @@ async def start(update: Update, context):
     admin_approved = user_data[12]
     step = user_data[7]
     
-    # Already completed
     if status == 'completed':
         await update.message.reply_text(
-            MessageTemplates.success_access(),
+            Messages.access_granted(),
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
         return
     
-    # Approved, waiting for payment
     if admin_approved == 1 and status == 'payment_pending':
-        text = f"""
-{LuxuryUI.EMOJIS['crown']} <b>CONGRATULATIONS!</b> {LuxuryUI.EMOJIS['crown']}
-
-{LuxuryUI.EMOJIS['check']} Your application has been <b>APPROVED</b>!
-
-{LuxuryUI.EMOJIS['divider']}
-
-<b>Next Step:</b> Complete your payment of {MEMBERSHIP_FEE}
-
-{LuxuryUI.EMOJIS['info']} Select your preferred payment method:
-"""
         keyboard = [
-            [LuxuryUI.button("Binance Pay", "binance", "gold")],
-            [LuxuryUI.button("Easypaisa", "easypaisa", "silver")]
+            [LuxuryUI.button("Binance Pay", "binance", "💰")],
+            [LuxuryUI.button("Easypaisa", "easypaisa", "📱")]
         ]
         
         await update.message.reply_text(
-            text,
+            Messages.approved(),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
     
-    # Pending review
     if step == 'info_submitted':
         await update.message.reply_text(
             f"""
-{LuxuryUI.EMOJIS['hourglass']} <b>APPLICATION UNDER REVIEW</b> {LuxuryUI.EMOJIS['hourglass']}
+{LuxuryUI.EMOJIS['hourglass']} <b>UNDER REVIEW</b>
 
-{LuxuryUI.EMOJIS['divider']}
+Aap ka application review ho raha hai.
+Approval ka intezaar karein.
 
-Your application is being reviewed by our admin team.
-You will receive a notification once approved.
-
-{LuxuryUI.EMOJIS['clock']} <i>Estimated time: 5-15 minutes</i>
+{LuxuryUI.EMOJIS['clock']} Time: 5-15 minutes
 """,
             parse_mode=ParseMode.HTML
         )
         return
     
-    # Payment verification pending
     if step == 'payment_submitted':
         await update.message.reply_text(
-            f"""
-{LuxuryUI.EMOJIS['clock']} <b>PAYMENT VERIFICATION</b> {LuxuryUI.EMOJIS['clock']}
-
-{LuxuryUI.EMOJIS['divider']}
-
-Your payment is being verified.
-You will receive access links once confirmed.
-
-{LuxuryUI.EMOJIS['info']} <i>Please do not send multiple screenshots</i>
-""",
+            Messages.verifying(),
             parse_mode=ParseMode.HTML
         )
         return
     
-    # Resume incomplete steps
+    # Resume steps
     if step == 'name_pending':
         await update.message.reply_text(
-            MessageTemplates.step_header(1, 4, "Personal Information") + 
-            "\nPlease enter your <b>full name</b> (as on official documents):",
+            Messages.step(1, 4, "Personal Info", "Apna <b>full name</b> enter karein (jaisa ID card par hai):"),
             parse_mode=ParseMode.HTML
         )
     elif step == 'email_pending':
         await update.message.reply_text(
-            MessageTemplates.step_header(2, 4, "Contact Details") +
-            f"\n{Name: <b>{user_data[2]}</b>\n\nPlease enter your <b>email address</b>:",
+            Messages.step(2, 4, "Contact Details", f"Name: <b>{user_data[2]}</b>\n\nApna <b>email address</b> enter karein:"),
             parse_mode=ParseMode.HTML
         )
     elif step == 'proof_pending':
         await update.message.reply_text(
-            MessageTemplates.step_header(3, 4, "Purchase Verification") +
-            "\nPlease upload screenshot of your <b>purchase receipt</b> or <b>proof</b>:",
+            Messages.step(3, 4, "Purchase Proof", "Apni <b>purchase receipt</b> ka screenshot upload karein:"),
             parse_mode=ParseMode.HTML
         )
     elif step == 'whatsapp_pending':
         await update.message.reply_text(
-            MessageTemplates.step_header(4, 4, "Final Step") +
-            "\nPlease enter your <b>WhatsApp number</b> with country code:\n" +
-            "<i>Example: +92 300 1234567</i>",
+            Messages.step(4, 4, "Final Step", "Apna <b>WhatsApp number</b> enter karein with country code:\n<i>Example: +923001234567</i>"),
             parse_mode=ParseMode.HTML
         )
     else:
         keyboard = [
-            [LuxuryUI.button("Premium Subscription", "premium", "gold")],
-            [LuxuryUI.button("Product Purchase", "product", "silver")]
+            [LuxuryUI.button("Premium Subscription", "premium", "👑")],
+            [LuxuryUI.button("Product Purchase", "product", "🛒")]
         ]
         await update.message.reply_text(
-            MessageTemplates.welcome(first_name),
+            Messages.welcome(first_name),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 async def handle_callback(update: Update, context):
-    """Handle all callbacks with luxury UI"""
     query = update.callback_query
     await query.answer()
     
     data = query.data
     user_id = update.effective_user.id
     
-    # Select subscription type
     if data in ['premium', 'product']:
         request_type = "Premium Subscription" if data == 'premium' else "Product Purchase"
         update_user(user_id, 'request_type', request_type)
         update_user(user_id, 'current_step', 'name_pending')
         
-        selected_text = f"""
-{LuxuryUI.EMOJIS['diamond']} <b>{request_type}</b> {LuxuryUI.EMOJIS['diamond']}
-
-{LuxuryUI.EMOJIS['check']} Selection confirmed!
-
-{MessageTemplates.step_header(1, 4, "Personal Information")}
-Please enter your <b>full name</b>:
-"""
-        await query.edit_message_text(selected_text, parse_mode=ParseMode.HTML)
-        return
-    
-    # Select payment
-    if data in ['binance', 'easypaisa']:
-        update_user(user_id, 'payment_method', data.capitalize())
-        
         await query.edit_message_text(
-            MessageTemplates.payment_info(data),
+            Messages.step(1, 4, "Personal Info", "Apna <b>full name</b> enter karein (jaisa ID card par hai):"),
             parse_mode=ParseMode.HTML
         )
         return
     
-    # Admin: Approve application
+    if data in ['binance', 'easypaisa']:
+        update_user(user_id, 'payment_method', data.capitalize())
+        
+        if data == 'binance':
+            await query.edit_message_text(
+                Messages.payment_binance(),
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            await query.edit_message_text(
+                Messages.payment_easypaisa(),
+                parse_mode=ParseMode.HTML
+            )
+        return
+    
+    # Admin approve
     if data.startswith('approve_'):
         try:
             target_id = int(data.split('_')[1])
             
             conn = get_db()
             c = conn.cursor()
-            c.execute("""
-                UPDATE users 
-                SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending' 
-                WHERE user_id = ?
-            """, (target_id,))
+            c.execute("UPDATE users SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending' WHERE user_id = ?", (target_id,))
             conn.commit()
             conn.close()
             
-            # Remove buttons and update message
+            # Remove buttons
             await query.edit_message_reply_markup(reply_markup=None)
             
-            original_text = query.message.text or query.message.caption or ""
-            updated_text = original_text + MessageTemplates.action_taken('approved')
+            original = query.message.text or query.message.caption or ""
+            updated = original + Messages.action_taken('approved')
             
             if query.message.photo:
-                await query.edit_message_caption(caption=updated_text, parse_mode=ParseMode.HTML)
+                await query.edit_message_caption(caption=updated, parse_mode=ParseMode.HTML)
             else:
-                await query.edit_message_text(updated_text, parse_mode=ParseMode.HTML)
+                await query.edit_message_text(updated, parse_mode=ParseMode.HTML)
             
-            # Notify user with luxury design
+            # Notify user
             keyboard = [
-                [LuxuryUI.button("Binance Pay", "binance", "gold")],
-                [LuxuryUI.button("Easypaisa", "easypaisa", "silver")]
+                [LuxuryUI.button("Binance Pay", "binance", "💰")],
+                [LuxuryUI.button("Easypaisa", "easypaisa", "📱")]
             ]
             
             await context.bot.send_message(
                 chat_id=target_id,
-                text=f"""
-{LuxuryUI.EMOJIS['medal']} <b>APPLICATION APPROVED!</b> {LuxuryUI.EMOJIS['medal']}
-
-{LuxuryUI.EMOJIS['divider']}
-
-Congratulations! You have been approved for membership.
-
-<b>Payment Required:</b> {MEMBERSHIP_FEE}
-
-{LuxuryUI.EMOJIS['info']} Select payment method:
-""",
+                text=Messages.approved(),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            await query.edit_message_text(f"{LuxuryUI.EMOJIS['cross']} Error: {e}")
+            await query.edit_message_text(f"❌ Error: {e}")
         return
     
-    # Admin: Reject application
+    # Admin reject
     if data.startswith('reject_'):
         try:
             target_id = int(data.split('_')[1])
             context.user_data['reject_id'] = target_id
             
-            # Remove buttons
             await query.edit_message_reply_markup(reply_markup=None)
             
-            original_text = query.message.text or query.message.caption or ""
-            updated_text = original_text + MessageTemplates.action_taken('rejected')
+            original = query.message.text or query.message.caption or ""
+            updated = original + Messages.action_taken('rejected')
             
             if query.message.photo:
-                await query.edit_message_caption(caption=updated_text, parse_mode=ParseMode.HTML)
+                await query.edit_message_caption(caption=updated, parse_mode=ParseMode.HTML)
             else:
-                await query.edit_message_text(updated_text, parse_mode=ParseMode.HTML)
+                await query.edit_message_text(updated, parse_mode=ParseMode.HTML)
             
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"""
-{LuxuryUI.EMOJIS['cross']} <b>REJECTION REASON REQUIRED</b>
-
-User ID: <code>{target_id}</code>
-
-Please type the reason for rejection:
-"""
+                text=f"❌ Rejecting user {target_id}\n\nRejection reason type karein:"
             )
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            await query.edit_message_text(f"{LuxuryUI.EMOJIS['cross']} Error: {e}")
+            await query.edit_message_text(f"❌ Error: {e}")
         return
     
-    # Admin: Final approve after payment
+    # Final approve
     if data.startswith('final_'):
         try:
             target_id = int(data.split('_')[1])
@@ -640,119 +524,95 @@ Please type the reason for rejection:
             conn.commit()
             conn.close()
             
-            # Remove buttons
             await query.edit_message_reply_markup(reply_markup=None)
             
-            original_text = query.message.caption or ""
-            updated_text = original_text + MessageTemplates.action_taken('payment_approved')
+            original = query.message.caption or ""
+            updated = original + Messages.action_taken('payment_verified')
             
-            await query.edit_message_caption(caption=updated_text, parse_mode=ParseMode.HTML)
+            await query.edit_message_caption(caption=updated, parse_mode=ParseMode.HTML)
             
-            # Send VIP access to user
             await context.bot.send_message(
                 chat_id=target_id,
-                text=MessageTemplates.success_access(),
+                text=Messages.access_granted(),
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True
             )
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            await query.edit_message_text(f"{LuxuryUI.EMOJIS['cross']} Error: {e}")
+            await query.edit_message_text(f"❌ Error: {e}")
         return
     
-    # Admin: Reject payment
+    # Reject payment
     if data.startswith('rejectpay_'):
         try:
             target_id = int(data.split('_')[1])
             context.user_data['reject_id'] = target_id
             context.user_data['reject_payment'] = True
             
-            # Remove buttons
             await query.edit_message_reply_markup(reply_markup=None)
             
-            original_text = query.message.caption or ""
-            updated_text = original_text + MessageTemplates.action_taken('payment_rejected')
+            original = query.message.caption or ""
+            updated = original + Messages.action_taken('payment_rejected')
             
-            await query.edit_message_caption(caption=updated_text, parse_mode=ParseMode.HTML)
+            await query.edit_message_caption(caption=updated, parse_mode=ParseMode.HTML)
             
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f"""
-{LuxuryUI.EMOJIS['cross']} <b>PAYMENT REJECTION REASON</b>
-
-User ID: <code>{target_id}</code>
-
-Please type the reason for payment rejection:
-"""
+                text=f"❌ Reject payment {target_id}\n\nReason type karein:"
             )
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            await query.edit_message_text(f"{LuxuryUI.EMOJIS['cross']} Error: {e}")
+            await query.edit_message_text(f"❌ Error: {e}")
         return
 
 async def handle_text(update: Update, context):
-    """Handle text with luxury validation"""
     user_id = update.effective_user.id
     text = update.message.text
     
     user_data = get_user(user_id)
     if not user_data:
-        await update.message.reply_text(
-            f"{LuxuryUI.EMOJIS['info']} Please send /start to begin",
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text("Send /start")
         return
     
     step = user_data[7]
     
-    # Handle name
+    # Name
     if step == 'name_pending':
         if len(text) < 2:
-            await update.message.reply_text(
-                f"{LuxuryUI.EMOJIS['cross']} Name too short. Please enter full name:",
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Name too short!")
             return
         
         update_user(user_id, 'full_name', text)
         update_user(user_id, 'current_step', 'email_pending')
         
         await update.message.reply_text(
-            MessageTemplates.step_header(2, 4, "Contact Details") +
-            f"\n{LuxuryUI.EMOJIS['check']} Name: <b>{text}</b>\n\nPlease enter your email:",
+            Messages.step(2, 4, "Contact Details", f"✅ Name: <b>{text}</b>\n\nApna <b>email</b> enter karein:"),
             parse_mode=ParseMode.HTML
         )
         return
     
-    # Handle email
+    # Email
     if step == 'email_pending':
         if "@" not in text or "." not in text.split('@')[-1]:
-            await update.message.reply_text(
-                f"{LuxuryUI.EMOJIS['cross']} Invalid email! Try again:",
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Invalid email! Try again:")
             return
         
         update_user(user_id, 'email', text)
         update_user(user_id, 'current_step', 'proof_pending')
         
         await update.message.reply_text(
-            MessageTemplates.step_header(3, 4, "Purchase Verification") +
-            f"\n{LuxuryUI.EMOJIS['check']} Email: <b>{text}</b>\n\nUpload proof screenshot:",
+            Messages.step(3, 4, "Purchase Proof", f"✅ Email: <b>{text}</b>\n\n<b>Proof screenshot</b> upload karein:"),
             parse_mode=ParseMode.HTML
         )
         return
     
-    # Handle WhatsApp
+    # WhatsApp
     if step == 'whatsapp_pending':
         clean = re.sub(r'[\s\-\(\)\.]', '', text)
         if not re.match(r'^\+\d{10,15}$', clean):
-            await update.message.reply_text(
-                f"{LuxuryUI.EMOJIS['cross']} Invalid format! Use: <b>+923001234567</b>",
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Invalid! Format: +923001234567")
             return
         
         update_user(user_id, 'whatsapp', clean)
@@ -760,14 +620,10 @@ async def handle_text(update: Update, context):
         
         await update.message.reply_text(
             f"""
-{LuxuryUI.EMOJIS['check']} <b>APPLICATION SUBMITTED!</b> {LuxuryUI.EMOJIS['check']}
+{LuxuryUI.EMOJIS['check']} <b>SUBMITTED!</b>
 
-{LuxuryUI.EMOJIS['divider']}
-
-Your application is under review.
-You will be notified once approved.
-
-{LuxuryUI.EMOJIS['clock']} <i>Thank you for your patience</i>
+Aap ka application admin review ke liye bhej diya gaya hai.
+Approval ka intezaar karein.
 """,
             parse_mode=ParseMode.HTML
         )
@@ -775,12 +631,12 @@ You will be notified once approved.
         # Send to admin
         keyboard = [
             [
-                LuxuryUI.button("Approve", f"approve_{user_id}", "success"),
-                LuxuryUI.button("Reject", f"reject_{user_id}", "danger")
+                LuxuryUI.button("Approve", f"approve_{user_id}", "✅"),
+                LuxuryUI.button("Reject", f"reject_{user_id}", "❌")
             ]
         ]
         
-        admin_msg = MessageTemplates.admin_notification(user_data, clean)
+        admin_msg = Messages.admin_new_application(user_data, clean)
         
         if user_data[6]:
             await context.bot.send_photo(
@@ -799,7 +655,7 @@ You will be notified once approved.
             )
         return
     
-    # Handle rejection reason
+    # Rejection reason
     if 'reject_id' in context.user_data:
         target_id = context.user_data['reject_id']
         is_payment = context.user_data.get('reject_payment', False)
@@ -809,18 +665,15 @@ You will be notified once approved.
         await context.bot.send_message(
             chat_id=target_id,
             text=f"""
-{LuxuryUI.EMOJIS['cross']} <b>{header}</b> {LuxuryUI.EMOJIS['cross']}
+{LuxuryUI.EMOJIS['cross']} <b>{header}</b>
 
 Reason: <i>{text}</i>
 
-{LuxuryUI.EMOJIS['info']} Contact support if you believe this is an error.
+Support se contact karein agar mistake lage.
 """
         )
         
-        await update.message.reply_text(
-            f"{LuxuryUI.EMOJIS['check']} Rejection sent to user {target_id}.",
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ User {target_id} notified.")
         
         del context.user_data['reject_id']
         if 'reject_payment' in context.user_data:
@@ -828,7 +681,6 @@ Reason: <i>{text}</i>
         return
 
 async def handle_photo(update: Update, context):
-    """Handle photos with luxury feedback"""
     user_id = update.effective_user.id
     user_data = get_user(user_id)
     
@@ -846,8 +698,7 @@ async def handle_photo(update: Update, context):
         update_user(user_id, 'current_step', 'whatsapp_pending')
         
         await update.message.reply_text(
-            MessageTemplates.step_header(4, 4, "Final Step") +
-            "\n" + LuxuryUI.EMOJIS['check'] + " Proof received!\n\nEnter WhatsApp (+923001234567):",
+            Messages.step(4, 4, "Final Step", "✅ Proof received!\n\n<b>WhatsApp number</b> enter karein (+923001234567):"),
             parse_mode=ParseMode.HTML
         )
         return
@@ -857,17 +708,9 @@ async def handle_photo(update: Update, context):
         photo = update.message.photo[-1]
         
         # Check duplicate
-        try:
-            file = await photo.get_file()
-            bytes_data = await file.download_as_bytearray()
-            hash_val = hashlib.md5(bytes_data).hexdigest()
-        except Exception as e:
-            logger.error(f"Error: {e}")
-            await update.message.reply_text(
-                f"{LuxuryUI.EMOJIS['cross']} Error processing image. Try again.",
-                parse_mode=ParseMode.HTML
-            )
-            return
+        file = await photo.get_file()
+        bytes_data = await file.download_as_bytearray()
+        hash_val = hashlib.md5(bytes_data).hexdigest()
         
         conn = get_db()
         c = conn.cursor()
@@ -875,12 +718,11 @@ async def handle_photo(update: Update, context):
         if c.fetchone():
             await update.message.reply_text(
                 f"""
-{LuxuryUI.EMOJIS['cross']} <b>DUPLICATE DETECTED</b> {LuxuryUI.EMOJIS['cross']}
+{LuxuryUI.EMOJIS['cross']} <b>DUPLICATE SCREENSHOT!</b>
 
-This screenshot has already been used.
-Please send a unique payment proof.
-""",
-                parse_mode=ParseMode.HTML
+Yeh screenshot pehle use ho chuka hai.
+New screenshot bhejein.
+"""
             )
             conn.close()
             return
@@ -896,40 +738,30 @@ Please send a unique payment proof.
         conn.close()
         
         await update.message.reply_text(
-            f"""
-{LuxuryUI.EMOJIS['clock']} <b>PAYMENT RECEIVED</b> {LuxuryUI.EMOJIS['clock']}
-
-{LuxuryUI.EMOJIS['divider']}
-
-Your payment is being verified.
-You will receive access within 5-10 minutes.
-
-{LuxuryUI.EMOJIS['info']} Do not send multiple screenshots.
-""",
+            Messages.verifying(),
             parse_mode=ParseMode.HTML
         )
         
         # Send to admin
         keyboard = [
             [
-                LuxuryUI.button("Verify & Grant Access", f"final_{user_id}", "gold"),
-                LuxuryUI.button("Reject Payment", f"rejectpay_{user_id}", "danger")
+                LuxuryUI.button("Verify & Grant Access", f"final_{user_id}", "🏆"),
+                LuxuryUI.button("Reject Payment", f"rejectpay_{user_id}", "🚫")
             ]
         ]
         
-        admin_text = MessageTemplates.admin_notification(user_data, None, is_payment=True)
+        admin_msg = Messages.admin_payment_verify(user_data)
         
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo.file_id,
-            caption=admin_text,
+            caption=admin_msg,
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
 
 def main():
-    """Run the luxury bot"""
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -939,13 +771,10 @@ def main():
     
     print("""
     ╔══════════════════════════════════════╗
-    ║     👑 LUXURY BOT ACTIVATED 👑       ║
-    ╠══════════════════════════════════════╣
-    ║  Premium Experience Initialized      ║
-    ║  Admin ID: {}                
-    ║  Status: ONLINE                      ║
+    ║     👑 PREMIUM BOT ACTIVATED 👑      ║
+    ║         Railway Ready                ║
     ╚══════════════════════════════════════╝
-    """.format(ADMIN_ID))
+    """)
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
