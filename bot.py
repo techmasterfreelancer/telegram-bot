@@ -1,10 +1,13 @@
 import logging
 import sqlite3
+import re
+import hashlib
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.constants import ParseMode
 
+# ================= CONFIG =================
 BOT_TOKEN = "8535390425:AAH4RF9v6k8H6fMQeXr_OQ6JuB7PV8gvgLs"
 ADMIN_ID = 7291034213
 
@@ -18,273 +21,255 @@ BINANCE_NETWORK = "TRC20"
 EASYPAYSA_NAME = "Jaffar Ali"
 EASYPAYSA_NUMBER = "03486623402"
 MEMBERSHIP_FEE = "$5 USD (Lifetime)"
+# ==========================================
 
 logging.basicConfig(level=logging.INFO)
-DB = "bot.db"
+logger = logging.getLogger(__name__)
+DB_PATH = "bot.db"
 
-def init():
-    conn = sqlite3.connect(DB)
+# ================= DATABASE =================
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users(
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         username TEXT,
         full_name TEXT,
         email TEXT,
         whatsapp TEXT,
         request_type TEXT,
-        proof TEXT,
-        payment_proof TEXT,
-        payment_method TEXT,
-        step TEXT,
+        proof_file_id TEXT,
+        payment_file_id TEXT,
+        current_step TEXT,
         status TEXT
     )''')
     conn.commit()
     conn.close()
 
-init()
+init_db()
 
-def get_user(uid):
-    conn = sqlite3.connect(DB)
+def get_user(user_id):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE user_id=?", (uid,))
-    u = c.fetchone()
+    c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    data = c.fetchone()
     conn.close()
-    return u
+    return data
 
-def update(uid, field, val):
-    conn = sqlite3.connect(DB)
+def update_user(user_id, field, value):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (val, uid))
+    c.execute(f"UPDATE users SET {field}=? WHERE user_id=?", (value, user_id))
     conn.commit()
     conn.close()
 
-def create(uid, username):
-    conn = sqlite3.connect(DB)
+def create_user(user_id, username):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users(user_id,username,step,status) VALUES(?,?,?,?)",
-              (uid, username, "name", "new"))
+    c.execute("INSERT OR IGNORE INTO users (user_id, username, current_step, status) VALUES (?, ?, ?, ?)",
+              (user_id, username, "start", "new"))
     conn.commit()
     conn.close()
 
-# ================= START =================
+# ================= PREMIUM MESSAGE BLOCKS =================
+
+WELCOME_BLOCK = """
+━━━━━━━━━━━━━━━━━━━━━━
+🎓 PREMIUM ACCESS PORTAL
+━━━━━━━━━━━━━━━━━━━━━━
+
+Welcome {name},
+
+To maintain quality and security of our private community,
+all members go through a short verification process.
+
+Please select your purchase type below.
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+SUBMIT_SUCCESS_BLOCK = """
+━━━━━━━━━━━━━━━━━━━━━━
+✅ APPLICATION SUBMITTED
+━━━━━━━━━━━━━━━━━━━━━━
+
+Your details have been forwarded to our verification team.
+
+⏳ Review Time: 2–24 Hours
+📩 You will receive approval notification here.
+
+Please wait patiently.
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+BILLING_BLOCK = """
+━━━━━━━━━━━━━━━━━━━━━━
+💳 PREMIUM MEMBERSHIP BILLING
+━━━━━━━━━━━━━━━━━━━━━━
+
+To activate your Lifetime Premium Access:
+
+💎 Fee: {fee}
+
+Please select your payment method below.
+
+After payment,
+upload your payment screenshot here.
+
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+FINAL_SUCCESS_BLOCK = """
+━━━━━━━━━━━━━━━━━━━━━━
+🏆 MEMBERSHIP ACTIVATED
+━━━━━━━━━━━━━━━━━━━━━━
+
+Congratulations!
+
+Your payment has been verified successfully.
+
+🔐 Access Links:
+
+Telegram:
+{telegram}
+
+WhatsApp:
+{whatsapp}
+
+Welcome to the Inner Circle.
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+# ================= BOT LOGIC =================
 
 async def start(update: Update, context):
-    u = update.effective_user
-    if not get_user(u.id):
-        create(u.id, u.username or "NoUsername")
+    user = update.effective_user
+    create_user(user.id, user.username or "NoUsername")
 
     keyboard = [
         [InlineKeyboardButton("💎 Premium Subscription", callback_data="type_premium")],
         [InlineKeyboardButton("🛒 Product Purchase", callback_data="type_product")]
     ]
 
-    await update.message.reply_text(f"""
-━━━━━━━━━━━━━━━━━━━━━━
-🎓 PREMIUM ACCESS PORTAL
-━━━━━━━━━━━━━━━━━━━━━━
+    await update.message.reply_text(
+        WELCOME_BLOCK.format(name=user.first_name),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-Welcome {u.first_name},
+async def handle_callback(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    user_data = get_user(user_id)
 
-To maintain community quality, we verify every customer.
-
-Select your purchase type below to begin verification.
-""", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# ================= CALLBACK =================
-
-async def callback(update: Update, context):
-    q = update.callback_query
-    await q.answer()
-    data = q.data
-
-    # Purchase type
-    if data.startswith("type_"):
-        update(q.from_user.id, "request_type",
-               "Premium Subscription" if "premium" in data else "Product Purchase")
-        update(q.from_user.id, "step", "name")
-        await q.edit_message_text("""
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 1 OF 4 — FULL NAME
-━━━━━━━━━━━━━━━━━━━━━━
-
-Enter your complete name used during purchase.
-""")
+    if query.data.startswith("type_"):
+        purchase = "Premium Subscription" if "premium" in query.data else "Product Purchase"
+        update_user(user_id, "request_type", purchase)
+        update_user(user_id, "current_step", "name")
+        await query.edit_message_text("Enter your Full Name:")
         return
 
-    # First Approve
-    if data.startswith("approve_"):
-        target = int(data.split("_")[1])
-        update(target, "status", "payment_pending")
+    if query.data.startswith("approve_"):
+        target = int(query.data.split("_")[1])
 
-        await q.edit_message_reply_markup(None)  # remove buttons only
-
-        keyboard = [
-            [InlineKeyboardButton("💰 Binance", callback_data=f"pay_binance_{target}")],
-            [InlineKeyboardButton("📱 Easypaisa", callback_data=f"pay_easypaisa_{target}")]
+        billing_keyboard = [
+            [InlineKeyboardButton("💰 Binance", callback_data="pay_binance")],
+            [InlineKeyboardButton("📱 Easypaisa", callback_data="pay_easypaisa")]
         ]
 
-        await context.bot.send_message(target, f"""
-━━━━━━━━━━━━━━━━━━━━━━
-🎉 APPLICATION APPROVED
-━━━━━━━━━━━━━━━━━━━━━━
+        await context.bot.send_message(
+            chat_id=target,
+            text=BILLING_BLOCK.format(fee=MEMBERSHIP_FEE),
+            reply_markup=InlineKeyboardMarkup(billing_keyboard),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
-Your request has been approved.
-
-To activate Premium Membership, complete the lifetime fee.
-
-💎 Membership Fee: {MEMBERSHIP_FEE}
-
-Select payment method below:
-""", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_reply_markup(reply_markup=None)
         return
 
-    # Payment method selected
-    if data.startswith("pay_"):
-        target = int(data.split("_")[2])
-        method = "Binance" if "binance" in data else "Easypaisa"
-        update(target, "payment_method", method)
+    if query.data.startswith("finalapprove_"):
+        target = int(query.data.split("_")[1])
 
-        details = f"""
-━━━━━━━━━━━━━━━━━━━━━━
-💳 PAYMENT DETAILS
-━━━━━━━━━━━━━━━━━━━━━━
+        await context.bot.send_message(
+            chat_id=target,
+            text=FINAL_SUCCESS_BLOCK.format(
+                telegram=TELEGRAM_GROUP_LINK,
+                whatsapp=WHATSAPP_GROUP_LINK
+            ),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
-Method: {method}
-Amount: {MEMBERSHIP_FEE}
-"""
-
-        if method == "Binance":
-            details += f"\nEmail: {BINANCE_EMAIL}\nNetwork: {BINANCE_NETWORK}"
-        else:
-            details += f"\nAccount: {EASYPAYSA_NUMBER}"
-
-        details += "\n\nAfter payment, upload payment screenshot."
-
-        await context.bot.send_message(target, details)
+        await query.edit_message_reply_markup(reply_markup=None)
         return
 
-    # Final Verify
-    if data.startswith("final_"):
-        target = int(data.split("_")[1])
-        update(target, "status", "completed")
+async def handle_text(update: Update, context):
+    user_id = update.effective_user.id
+    text = update.message.text
+    user_data = get_user(user_id)
 
-        await q.edit_message_reply_markup(None)
-
-        await context.bot.send_message(target, f"""
-━━━━━━━━━━━━━━━━━━━━━━
-🏆 PREMIUM MEMBERSHIP ACTIVATED
-━━━━━━━━━━━━━━━━━━━━━━
-
-Congratulations!
-
-Telegram:
-{TELEGRAM_GROUP_LINK}
-
-WhatsApp:
-{WHATSAPP_GROUP_LINK}
-
-Welcome to the Inner Circle.
-""", parse_mode=ParseMode.MARKDOWN)
-        return
-
-# ================= TEXT =================
-
-async def text(update: Update, context):
-    user = get_user(update.effective_user.id)
-    if not user:
-        return
-
-    step = user[9]
+    step = user_data[8]
 
     if step == "name":
-        update(user[0], "full_name", update.message.text)
-        update(user[0], "step", "email")
-        await update.message.reply_text("""
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 2 OF 4 — EMAIL CONFIRMATION
-━━━━━━━━━━━━━━━━━━━━━━
-Enter your registered email.
-""")
+        update_user(user_id, "full_name", text)
+        update_user(user_id, "current_step", "email")
+        await update.message.reply_text("Enter your Email:")
         return
 
     if step == "email":
-        update(user[0], "email", update.message.text)
-        update(user[0], "step", "proof")
-        await update.message.reply_text("""
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 3 OF 4 — PURCHASE PROOF
-━━━━━━━━━━━━━━━━━━━━━━
-Upload your purchase screenshot.
-""")
+        update_user(user_id, "email", text)
+        update_user(user_id, "current_step", "proof")
+        await update.message.reply_text("Upload Purchase Screenshot:")
         return
 
     if step == "whatsapp":
-        update(user[0], "whatsapp", update.message.text)
-        update(user[0], "step", "done")
+        update_user(user_id, "whatsapp", text)
+        update_user(user_id, "current_step", "submitted")
 
-        await update.message.reply_text("""
-━━━━━━━━━━━━━━━━━━━━━━
-✅ APPLICATION SUBMITTED
-━━━━━━━━━━━━━━━━━━━━━━
+        await update.message.reply_text(SUBMIT_SUCCESS_BLOCK, parse_mode=ParseMode.MARKDOWN)
 
-Your information has been forwarded for admin review.
-""")
+        keyboard = [[
+            InlineKeyboardButton("✅ APPROVE", callback_data=f"approve_{user_id}"),
+            InlineKeyboardButton("❌ REJECT", callback_data=f"reject_{user_id}")
+        ]]
 
-# ================= PHOTO =================
-
-async def photo(update: Update, context):
-    user = get_user(update.effective_user.id)
-    if not user:
-        return
-
-    # Purchase proof
-    if user[9] == "proof":
-        update(user[0], "proof", update.message.photo[-1].file_id)
-        update(user[0], "step", "whatsapp")
-        await update.message.reply_text("""
-━━━━━━━━━━━━━━━━━━━━━━
-STEP 4 OF 4 — WHATSAPP NUMBER
-━━━━━━━━━━━━━━━━━━━━━━
-Enter your WhatsApp number with country code.
-""")
-        return
-
-    # Payment proof
-    if user[10] == "payment_pending":
-        update(user[0], "payment_proof", update.message.photo[-1].file_id)
-
-        keyboard = [[InlineKeyboardButton("✅ VERIFY & ACTIVATE",
-                                          callback_data=f"final_{user[0]}")]]
-
-        await context.bot.send_photo(
-            ADMIN_ID,
-            update.message.photo[-1].file_id,
-            caption=f"""
-💰 PAYMENT RECEIVED
-
-User: @{user[1]}
-Name: {user[2]}
-Email: {user[3]}
-WhatsApp: {user[4]}
-Method: {user[8]}
-""",
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"New Request from @{user_data[1]}\nID: {user_id}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        await update.message.reply_text("""
-⏳ Payment submitted successfully.
-Admin team will review within 24 hours.
-""")
+async def handle_photo(update: Update, context):
+    user_id = update.effective_user.id
+    user_data = get_user(user_id)
+
+    if user_data[8] == "proof":
+        update_user(user_id, "proof_file_id", update.message.photo[-1].file_id)
+        update_user(user_id, "current_step", "whatsapp")
+        await update.message.reply_text("Enter WhatsApp Number:")
         return
 
-# ================= MAIN =================
+    if user_data[8] == "payment":
+        update_user(user_id, "payment_file_id", update.message.photo[-1].file_id)
+
+        keyboard = [[
+            InlineKeyboardButton("✅ FINAL APPROVE", callback_data=f"finalapprove_{user_id}")
+        ]]
+
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
+            photo=update.message.photo[-1].file_id,
+            caption=f"Payment received from @{user_data[1]}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text))
-    app.add_handler(MessageHandler(filters.PHOTO, photo))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    print("Premium Stable Bot Running...")
     app.run_polling()
 
 if __name__ == "__main__":
