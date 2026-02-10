@@ -1,30 +1,31 @@
 import logging
 import sqlite3
 import hashlib
-import re
 import os
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 
-# ============= CONFIGURATION =============
+# ============= APNI DETAILS YAHAN DAALEN =============
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN', '8535390425:AAGdysiGhg5y82rCLkVi2t2yJGGhCXXlnIY')
-ADMIN_ID = int(os.environ.get('ADMIN_ID', '7291034213'))
-TELEGRAM_GROUP_LINK = os.environ.get('TELEGRAM_GROUP_LINK', 'https://t.me/+P8gZuIBH75RiOThk')
+BOT_TOKEN = "8535390425:AAFLbRWHfy9reLO94h91N5wlAou4gxfgK3c"
+ADMIN_ID = 7291034213  # YAHAN_APNA_TELEGRAM_ID_DAALEN
 
-BINANCE_EMAIL = os.environ.get('BINANCE_EMAIL', 'techmasterfreelancer@gmail.com')
-BINANCE_ID = os.environ.get('BINANCE_ID', '1129541950')
-BINANCE_NETWORK = os.environ.get('BINANCE_NETWORK', 'TRC20')
-Wallet_Address = os.environ.get('USDT', 'TWzf9VJmr2mhq5H8Xa3bLhbb8dwmWdG9B7')
+# GROUP LINKS
+TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
 
-EASYPAYSA_NAME = os.environ.get('EASYPAYSA_NAME', 'Jaffar Ali')
-EASYPAYSA_NUMBER = os.environ.get('EASYPAYSA_NUMBER', '03486623402')
+# PAYMENT DETAILS
+BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
+BINANCE_ID = "1129541950"
+BINANCE_NETWORK = "TRC20"
 
-MEMBERSHIP_FEE = os.environ.get('MEMBERSHIP_FEE', '$5 USD (Lifetime)')
+EASYPAYSA_NAME = "Jaffar Ali"
+EASYPAYSA_NUMBER = "03486623402"
 
-# ========================================
+MEMBERSHIP_FEE = "$5 USD (Lifetime)"
+
+# =====================================================
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -32,10 +33,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_PATH = 'bot.db'
+# ============= DATABASE SETUP =============
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect('bot.db')
     c = conn.cursor()
     
     c.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -51,7 +52,6 @@ def init_db():
         payment_file_id TEXT,
         payment_hash TEXT UNIQUE,
         status TEXT DEFAULT 'new',
-        admin_approved INTEGER DEFAULT 0,
         created_at TIMESTAMP,
         updated_at TIMESTAMP
     )''')
@@ -69,9 +69,9 @@ def init_db():
 init_db()
 
 def get_db():
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect('bot.db')
 
-def get_user(user_id):
+def get_user_data(user_id):
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
@@ -98,6 +98,9 @@ def update_user(user_id, field, value):
     conn.commit()
     conn.close()
 
+def update_step(user_id, step):
+    update_user(user_id, 'current_step', step)
+
 def check_duplicate(file_hash):
     conn = get_db()
     c = conn.cursor()
@@ -119,111 +122,141 @@ def save_hash(file_hash, user_id):
     finally:
         conn.close()
 
-SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW = range(6)
+# ============= CONVERSATION STATES =============
+
+SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW, SELECT_PAYMENT, GET_PAYMENT_PROOF, FINAL_APPROVAL = range(9)
+
+# ============= START COMMAND =============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle start command with resume feature"""
     user = update.effective_user
     user_id = user.id
     username = user.username or "No username"
-    first_name = user.first_name
     
-    user_data = get_user(user_id)
+    # Get existing user data
+    user_data = get_user_data(user_id)
     
     if not user_data:
+        # New user
         create_user(user_id, username)
-        await send_welcome(update, first_name)
+        await send_welcome(update, user.first_name)
         return SELECT_TYPE
     
-    step = user_data[7]
-    status = user_data[11]
-    admin_approved = user_data[12]
+    # Existing user - check status
+    step = user_data[7]  # current_step
+    status = user_data[11]  # status
     
-    if status == 'completed':
+    # If already approved
+    if status == 'approved':
         await update.message.reply_text(
-            f"✅ Welcome back {first_name}!\n\nYou already have access.\n\n"
-            f"🔗 Telegram: {TELEGRAM_GROUP_LINK}\n"
-            f"📱 WhatsApp: {WHATSAPP_GROUP_LINK}",
+            f"✅ *Welcome back {user.first_name}!*\n\n"
+            f"Aap already approved hain.\n\n"
+            f"🔗 *Telegram Group:*\n{TELEGRAM_GROUP_LINK}\n\n"
+            f"📱 *WhatsApp Group:*\n{WHATSAPP_GROUP_LINK}",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
-    if admin_approved == 1 and status == 'payment_pending':
+    # If payment pending
+    if status == 'payment_pending':
         keyboard = [
             [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
             [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
         ]
         await update.message.reply_text(
-            f"⏰ Payment Reminder for {first_name}\n\n"
-            f"✅ Your application is APPROVED!\n\n"
-            f"💎 Fee: {MEMBERSHIP_FEE}\n\n"
-            f"👇 Select payment method:",
+            f"👋 *Welcome back {user.first_name}!*\n\n"
+            f"💎 *Premium Group Join Karne Ke Liye:*\n"
+            f"💵 *Fee:* {MEMBERSHIP_FEE}\n\n"
+            f"👇 *Payment method select karein:*",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
-        return ConversationHandler.END
+        return SELECT_PAYMENT
     
-    if step == 'info_submitted' and admin_approved == 0:
+    # If proof submitted, waiting for admin
+    if step == 'proof_submitted':
         await update.message.reply_text(
-            f"⏳ Hello {first_name}!\n\n"
-            f"Your information is submitted.\n"
-            f"Status: PENDING\n\n"
-            f"Please wait for admin review.",
+            f"⏳ *Welcome back {user.first_name}!*\n\n"
+            f"Aapki application admin ke paas hai.\n"
+            f"🕐 *Approval ka intezaar karein...*\n\n"
+            f"Jab admin approve karega, aapko fee payment ka message mil jayega.",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
+    # If payment proof submitted
     if step == 'payment_submitted':
         await update.message.reply_text(
-            f"⏳ Hello {first_name}!\n\n"
-            f"Your payment proof is under verification.\n"
-            f"Please wait...",
+            f"⏳ *Welcome back {user.first_name}!*\n\n"
+            f"Aapka payment proof admin ke paas hai.\n"
+            f"🕐 *Verification ka intezaar karein...*",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
+    # Resume from where left
     if step == 'name_pending':
         await update.message.reply_text(
-            f"🔄 Welcome back {first_name}!\n\nEnter your full name:",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"📝 *Apna full name bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_NAME
     
     if step == 'email_pending':
         await update.message.reply_text(
-            f"🔄 Welcome back!\n\n✅ Name: {user_data[2]}\n\nEnter your email:",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"✅ Name: *{user_data[2]}*\n\n"
+            f"📧 *Apna email bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_EMAIL
     
     if step == 'proof_pending':
+        request_type = user_data[5] or "product"
         await update.message.reply_text(
-            f"🔄 Welcome back!\n\nPlease send your proof screenshot:",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"📸 *Aapne {request_type} ka proof nahi bheja.*\n\n"
+            f"Please screenshot bhejein:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_PROOF
     
     if step == 'whatsapp_pending':
         await update.message.reply_text(
-            f"🔄 Welcome back!\n\nEnter your WhatsApp number:",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"✅ Name: *{user_data[2]}*\n"
+            f"✅ Email: *{user_data[3]}*\n"
+            f"✅ Proof received\n\n"
+            f"📱 *Apna WhatsApp number bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
     
-    await send_welcome(update, first_name)
+    # Default - restart
+    await send_welcome(update, user.first_name)
     return SELECT_TYPE
 
 async def send_welcome(update, first_name):
+    """Send welcome message"""
     keyboard = [
         [InlineKeyboardButton("💎 Premium Subscription", callback_data='type_premium')],
         [InlineKeyboardButton("🛒 Product Purchase", callback_data='type_product')]
     ]
+    
     await update.message.reply_text(
-        f"👋 Welcome {first_name}!\n\nWhat did you buy from my website?\n\n👇 Please select:",
+        f"👋 *Welcome {first_name}!*\n\n"
+        f"Kya aapne meri website se *Premium Subscription* buy ki hai ya *koi Product* buy kiya hai?\n\n"
+        f"👇 *Select karein:*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
 
+# ============= TYPE SELECTION =============
+
 async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle type selection"""
     query = update.callback_query
     await query.answer()
     
@@ -232,93 +265,118 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request_type = "Premium Subscription" if data == 'premium' else "Product Purchase"
     
     update_user(user_id, 'request_type', request_type)
-    update_user(user_id, 'current_step', 'name_pending')
+    update_step(user_id, 'name_pending')
     
     await query.edit_message_text(
-        f"✅ {request_type} selected!\n\n📝 Step 1/4: Enter your full name:",
+        f"✅ *{request_type}* selected!\n\n"
+        f"💎 *Premium group mein add hone ke liye kuch information li jayegi.*\n\n"
+        f"📝 *Step 1/4: Apna full name bataiye:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_NAME
 
+# ============= COLLECT INFO =============
+
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get full name"""
     user_id = update.effective_user.id
     name = update.message.text
     
-    if len(name) < 2:
-        await update.message.reply_text("❌ Name too short! Enter full name:")
-        return GET_NAME
-    
     update_user(user_id, 'full_name', name)
-    update_user(user_id, 'current_step', 'email_pending')
+    update_step(user_id, 'email_pending')
     
     await update.message.reply_text(
-        f"✅ Name: {name}\n\n📧 Step 2/4: Enter your email address:",
+        f"✅ *Name: {name}*\n\n"
+        f"📧 *Step 2/4: Apna email address bataiye:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_EMAIL
 
 async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get email"""
     user_id = update.effective_user.id
-    email = update.message.text.lower().strip()
+    email = update.message.text
     
+    # Validate
     if "@" not in email or "." not in email:
-        await update.message.reply_text("❌ Invalid email! Enter valid email:")
+        await update.message.reply_text(
+            "❌ *Invalid email!* Sahi email bataiye:",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return GET_EMAIL
     
     update_user(user_id, 'email', email)
-    update_user(user_id, 'current_step', 'proof_pending')
+    update_step(user_id, 'proof_pending')
     
-    user_data = get_user(user_id)
-    request_type = user_data[5] or "purchase"
+    # Get request type for message
+    user_data = get_user_data(user_id)
+    request_type = user_data[5] or "product"
     
     await update.message.reply_text(
-        f"✅ Email: {email}\n\n📸 Step 3/4: Send your {request_type} proof (screenshot):",
+        f"✅ *Email: {email}*\n\n"
+        f"📸 *Step 3/4: Apne {request_type} ka proof/screenshot bhejiye:*\n\n"
+        f"⚠️ *Clear image honi chahiye jisme details dikhein*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_PROOF
 
 async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get proof screenshot"""
     user_id = update.effective_user.id
     
     if not update.message.photo:
-        await update.message.reply_text("❌ Please send an image/screenshot!")
+        await update.message.reply_text(
+            "❌ *Please image bhejiye!* Screenshot bhejein:",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return GET_PROOF
     
+    # Save photo
     photo = update.message.photo[-1]
     file_id = photo.file_id
     
     update_user(user_id, 'proof_file_id', file_id)
-    update_user(user_id, 'current_step', 'whatsapp_pending')
+    update_step(user_id, 'whatsapp_pending')
+    
+    # Get user data for confirmation
+    user_data = get_user_data(user_id)
     
     await update.message.reply_text(
-        "✅ Proof received!\n\n📱 Step 4/4: Enter your WhatsApp number (with country code):\n\nExample: +923001234567",
+        f"✅ *Proof received!*\n\n"
+        f"📱 *Step 4/4: Apna WhatsApp number bataiye (country code ke saath):*\n\n"
+        f"Example: +923001234567",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_WHATSAPP
 
 async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get WhatsApp and submit to admin"""
     user_id = update.effective_user.id
-    whatsapp = update.message.text.strip()
+    whatsapp = update.message.text
     
-    clean_number = re.sub(r'[\s\-\(\)\.]', '', whatsapp)
-    
-    if not re.match(r'^\+\d{10,15}$', clean_number):
+    # Basic validation
+    if len(whatsapp) < 10 or not whatsapp.replace('+', '').replace('-', '').isdigit():
         await update.message.reply_text(
-            "❌ Invalid WhatsApp number!\n\nEnter with country code:\n• +923001234567\n• +14155552671"
+            "❌ *Invalid number!* Sahi WhatsApp number bataiye:\n\n"
+            f"Example: +923001234567",
+            parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
     
-    update_user(user_id, 'whatsapp', clean_number)
-    update_user(user_id, 'current_step', 'info_submitted')
+    update_user(user_id, 'whatsapp', whatsapp)
+    update_step(user_id, 'proof_submitted')
     
+    # Confirm to user
     await update.message.reply_text(
-        "✅ Your information has been successfully submitted!\n\n"
-        "🕐 It has been sent to admin for review.\n\n"
-        "Please wait... You will receive a notification once approved.",
+        "✅ *Aapki information successfully submit ho gayi hai!*\n\n"
+        "🕐 *Aap se jald contact kiya jayega.*\n\n"
+        "⏳ Admin review kar raha hai...\n"
+        "🔔 Jab approve hoga, aapko fee payment ka message mil jayega.",
         parse_mode=ParseMode.MARKDOWN
     )
     
-    user_data = get_user(user_id)
+    # Send to admin
+    user_data = get_user_data(user_id)
     
     keyboard = [
         [
@@ -328,20 +386,21 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     caption = f"""
-🆕 NEW APPLICATION FOR REVIEW
+🆕 *NEW APPLICATION*
 
-👤 User: @{user_data[1]}
-🆔 ID: {user_id}
-📋 Type: {user_data[5]}
-📝 Name: {user_data[2]}
-📧 Email: {user_data[3]}
-📱 WhatsApp: {clean_number}
-⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+👤 *User:* @{user_data[1]}
+🆔 *ID:* `{user_id}`
+📋 *Type:* {user_data[5]}
+📝 *Name:* {user_data[2]}
+📧 *Email:* {user_data[3]}
+📱 *WhatsApp:* {whatsapp}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 Please review:
+👇 *Action karein:*
     """
     
-    if user_data[6]:
+    # Send proof photo if available
+    if user_data[6]:  # proof_file_id
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=user_data[6],
@@ -362,82 +421,57 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============= ADMIN ACTIONS =============
 
 async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """First approval - send payment request"""
+    """Admin approves - send fee message"""
     query = update.callback_query
     await query.answer()
     
-    try:
-        # Extract user_id from callback_data
-        data_parts = query.data.split('_')
-        if len(data_parts) < 2:
-            await query.edit_message_text("Error: Invalid callback data")
-            return
-        
-        user_id = int(data_parts[1])
-        
-        # Update database
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("UPDATE users SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending', updated_at = ? WHERE user_id = ?",
-                  (datetime.now(), user_id))
-        conn.commit()
-        conn.close()
-        
-        # Send payment request to user
-        keyboard = [
-            [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
-            [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
-        ]
-        
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"""
-🎉 CONGRATULATIONS! YOUR APPLICATION IS APPROVED!
+    user_id = int(query.data.split('_')[1])
+    
+    # Update status
+    update_user(user_id, 'status', 'payment_pending')
+    update_step(user_id, 'payment_pending')
+    
+    # Send fee message to user
+    keyboard = [
+        [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
+        [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
+    ]
+    
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=f"""
+🎉 *APPLICATION APPROVED!*
 
-✅ Admin has reviewed and approved your application!
+✅ Admin ne aapki application *verify* kar li hai!
 
-💎 To join Premium Group, please pay the Lifetime Membership Fee:
-💵 {MEMBERSHIP_FEE}
+💎 *Premium Group Join Karne Ke Liye Lifetime Fee:*
+💵 *{MEMBERSHIP_FEE}*
 
-👇 Select your payment method:
-            """,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Update admin message
-        await query.edit_message_text(
-            f"✅ Approved! User {user_id} has been notified to complete payment.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in admin_approve: {e}")
-        await query.edit_message_text(f"Error: {str(e)}")
+👇 *Payment method select karein:*
+        """,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    await query.edit_message_text(
+        f"✅ *Approved!*\n\nUser `{user_id}` ko fee message bhej diya.",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reject application"""
+    """Admin rejects application"""
     query = update.callback_query
     await query.answer()
     
-    try:
-        data_parts = query.data.split('_')
-        if len(data_parts) < 2:
-            await query.edit_message_text("Error: Invalid callback data")
-            return
-        
-        user_id = int(data_parts[1])
-        context.user_data['reject_user_id'] = user_id
-        
-        await query.edit_message_text(
-            f"❌ Rejecting user {user_id}\n\nPlease enter rejection reason:",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return ADMIN_REVIEW
-        
-    except Exception as e:
-        logger.error(f"Error in admin_reject: {e}")
-        await query.edit_message_text(f"Error: {str(e)}")
+    user_id = int(query.data.split('_')[1])
+    context.user_data['reject_user_id'] = user_id
+    
+    await query.edit_message_text(
+        f"❌ *Rejecting user {user_id}*\n\n"
+        f"*Reason bataiye (message bhejein):*",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return ADMIN_REVIEW
 
 async def handle_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle rejection reason"""
@@ -448,16 +482,17 @@ async def handle_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Error!")
         return ConversationHandler.END
     
+    # Send to user
     await context.bot.send_message(
         chat_id=user_id,
         text=f"""
-❌ APPLICATION REJECTED
+❌ *APPLICATION REJECTED*
 
-Your application has been rejected.
+Aapki application reject kar di gayi hai.
 
-Reason: {reason}
+*Reason:* {reason}
 
-You can apply again by sending /start
+Dubara apply karne ke liye /start karein.
         """,
         parse_mode=ParseMode.MARKDOWN
     )
@@ -472,36 +507,34 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
+    method = query.data.split('_')[1]
     user_id = update.effective_user.id
     
-    # Get method from callback_data
-    if query.data == 'pay_binance':
-        method = 'Binance'
+    update_user(user_id, 'payment_method', method.capitalize())
+    
+    if method == 'binance':
         details = f"""
-💰 BINANCE PAYMENT DETAILS
+💰 *BINANCE PAYMENT DETAILS*
 
-📧 Email: {BINANCE_EMAIL}
-🆔 Binance ID: {BINANCE_ID}
-🌐 Network: {BINANCE_NETWORK}
+📧 *Email:* `{BINANCE_EMAIL}`
+🆔 *Binance ID:* `{BINANCE_ID}`
+🌐 *Network:* `{BINANCE_NETWORK}`
 
-💵 Amount: {MEMBERSHIP_FEE}
+💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ After payment, please send the screenshot here.
+✅ *Payment karne ke baad screenshot yahan bhejein.*
         """
     else:
-        method = 'Easypaisa'
         details = f"""
-📱 EASYPAYSA PAYMENT DETAILS
+📱 *EASYPAYSA PAYMENT DETAILS*
 
-👤 Account Name: {EASYPAYSA_NAME}
-📞 Account Number: {EASYPAYSA_NUMBER}
+👤 *Name:* {EASYPAYSA_NAME}
+📞 *Number:* `{EASYPAYSA_NUMBER}`
 
-💵 Amount: {MEMBERSHIP_FEE}
+💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ After payment, please send the screenshot here.
+✅ *Payment karne ke baad screenshot yahan bhejein.*
         """
-    
-    update_user(user_id, 'payment_method', method)
     
     await context.bot.send_message(
         chat_id=user_id,
@@ -509,77 +542,88 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Store that we're waiting for payment proof
+    # Mark that we're waiting for payment proof
     context.user_data[f'awaiting_payment_{user_id}'] = True
+    
+    await query.edit_message_text(
+        f"✅ *Payment details sent to user {user_id}*",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive payment screenshot"""
     user_id = update.effective_user.id
     
-    user_data = get_user(user_id)
+    # Check if user is in payment phase
+    user_data = get_user_data(user_id)
     
-    if not user_data:
-        return
-    
-    status = user_data[11]
-    admin_approved = user_data[12]
-    
-    # Only process if admin approved and payment pending
-    if not (admin_approved == 1 and status == 'payment_pending'):
+    if not user_data or user_data[11] != 'payment_pending':
+        # Not in payment phase, ignore or handle as new proof
         return
     
     if not update.message.photo:
-        await update.message.reply_text("❌ Please send payment screenshot as image!")
+        await update.message.reply_text(
+            "❌ *Please payment ka screenshot bhejiye!*",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
     
+    # Process screenshot
     photo = update.message.photo[-1]
     photo_file = await photo.get_file()
     
+    # Check duplicate
     file_bytes = await photo_file.download_as_bytearray()
     image_hash = hashlib.md5(file_bytes).hexdigest()
     
     duplicate = check_duplicate(image_hash)
     if duplicate:
-        await update.message.reply_text("🚫 THIS SCREENSHOT HAS ALREADY BEEN USED!")
+        await update.message.reply_text(
+            "🚫 *YE SCREENSHOT PEHLE USE HO CHUKA HAI!*",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
     
+    # Save
     save_hash(image_hash, user_id)
     
+    # Update user
     conn = get_db()
     c = conn.cursor()
-    c.execute("UPDATE users SET payment_file_id = ?, payment_hash = ?, current_step = ?, status = ? WHERE user_id = ?",
-              (photo.file_id, image_hash, 'payment_submitted', 'payment_verification', user_id))
+    c.execute("UPDATE users SET payment_file_id = ?, payment_hash = ?, current_step = ? WHERE user_id = ?",
+              (photo.file_id, image_hash, 'payment_submitted', user_id))
     conn.commit()
     conn.close()
     
+    # Confirm to user
     await update.message.reply_text(
-        "⏳ Payment Screenshot Received!\n\n"
-        "✅ Admin is verifying your payment...\n"
-        "🕐 You will receive group links once verified.\n\n"
-        "⚠️ Fake screenshots will result in permanent ban!",
+        "⏳ *Payment Screenshot Received!*\n\n"
+        "✅ Admin verify kar raha hai...\n"
+        "🕐 *Approval ke baad aapko group link mil jayega.*\n\n"
+        "⚠️ *Fake screenshot par ban lag sakta hai!*",
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Send to admin with APPROVE and REJECT buttons
+    # Send to admin
     keyboard = [
         [
-            InlineKeyboardButton("✅ Approve & Send Links", callback_data=f'approvelink_{user_id}'),
-            InlineKeyboardButton("❌ Reject Payment", callback_data=f'rejectpay_{user_id}')
+            InlineKeyboardButton("✅ Approve & Send Link", callback_data=f'finallink_{user_id}'),
+            InlineKeyboardButton("❌ Reject", callback_data=f'rejectpay_{user_id}')
         ]
     ]
     
     caption = f"""
-💰 NEW PAYMENT RECEIVED FOR VERIFICATION
+💰 *NEW PAYMENT RECEIVED*
 
-👤 User: @{user_data[1]}
-🆔 ID: {user_id}
-📝 Name: {user_data[2]}
-📧 Email: {user_data[3]}
-📱 WhatsApp: {user_data[4]}
-💳 Payment Method: {user_data[8] or 'Not specified'}
-⏰ Received: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+👤 *User:* @{user_data[1]}
+🆔 *ID:* `{user_id}`
+📝 *Name:* {user_data[2]}
+📧 *Email:* {user_data[3]}
+📱 *WhatsApp:* {user_data[4]}
+💳 *Method:* {user_data[8]}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 Please verify and take action:
+👇 *Verify karein:*
     """
     
     await context.bot.send_photo(
@@ -591,89 +635,68 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """FINAL APPROVAL - Send group links"""
+    """Final approval - send group links"""
     query = update.callback_query
     await query.answer()
     
-    try:
-        # Extract user_id
-        data_parts = query.data.split('_')
-        if len(data_parts) < 2:
-            await query.edit_message_text("Error: Invalid callback data")
-            return
-        
-        user_id = int(data_parts[1])
-        
-        # Update database
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("UPDATE users SET status = 'completed', current_step = 'completed', updated_at = ? WHERE user_id = ?",
-                  (datetime.now(), user_id))
-        conn.commit()
-        conn.close()
-        
-        # Send links to user
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"""
-🎉 PAYMENT VERIFIED SUCCESSFULLY!
+    user_id = int(query.data.split('_')[1])
+    
+    # Update status
+    update_user(user_id, 'status', 'approved')
+    
+    # Send links to user
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=f"""
+🎉 *PAYMENT APPROVED!*
 
-✅ Your payment has been verified!
+✅ Aapki payment verify ho gayi hai!
 
-🔗 TELEGRAM PREMIUM GROUP:
+🔗 *TELEGRAM GROUP:*
 {TELEGRAM_GROUP_LINK}
 
-📱 WHATSAPP PREMIUM GROUP:
+📱 *WHATSAPP GROUP:*
 {WHATSAPP_GROUP_LINK}
 
-⚠️ Important Rules:
-• Do not share these links with anyone
-• Follow all group rules
-• Do not add fake members
-• Lifetime access granted
+⚠️ *Important:*
+• Links share nahi karein
+• Group rules follow karein
+• Fake members add nahi karein
 
-🚀 Welcome to Premium Family! Enjoy your access!
-            """,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=False
-        )
-        
-        # Update admin message
-        await query.edit_message_text(
-            f"✅ User {user_id} fully approved!\nBoth group links sent.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in final_approve: {e}")
-        await query.edit_message_text(f"Error: {str(e)}")
+🚀 *Welcome to Premium Family!*
+        """,
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=False
+    )
+    
+    await query.edit_message_text(
+        f"✅ *User {user_id} approved!*\nGroup links sent.",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Reject payment"""
     query = update.callback_query
     await query.answer()
     
-    try:
-        data_parts = query.data.split('_')
-        if len(data_parts) < 2:
-            await query.edit_message_text("Error: Invalid callback data")
-            return
-        
-        user_id = int(data_parts[1])
-        context.user_data['reject_user_id'] = user_id
-        
-        await query.edit_message_text(
-            f"❌ Rejecting payment from user {user_id}\n\nPlease enter rejection reason:",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return ADMIN_REVIEW
-        
-    except Exception as e:
-        logger.error(f"Error in reject_payment: {e}")
-        await query.edit_message_text(f"Error: {str(e)}")
+    user_id = int(query.data.split('_')[1])
+    context.user_data['reject_user_id'] = user_id
+    context.user_data['reject_type'] = 'payment'
+    
+    await query.edit_message_text(
+        f"❌ *Rejecting payment {user_id}*\n\n"
+        f"*Reason bataiye:*",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    return FINAL_APPROVAL
+
+# ============= CANCEL =============
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Cancelled.\nSend /start to begin again.")
+    """Cancel"""
+    await update.message.reply_text(
+        "❌ Cancelled.\nDubara shuru karne ke liye /start karein."
+    )
     return ConversationHandler.END
 
 # ============= MAIN =============
@@ -681,6 +704,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
+    # Main conversation
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -690,24 +714,25 @@ def main():
             GET_PROOF: [MessageHandler(filters.PHOTO, get_proof)],
             GET_WHATSAPP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_whatsapp)],
             ADMIN_REVIEW: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rejection)],
+            FINAL_APPROVAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rejection)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     
     application.add_handler(conv_handler)
     
-    # ALL CALLBACK HANDLERS - FIXED ORDER AND PATTERNS
-    application.add_handler(CallbackQueryHandler(show_payment_details, pattern='^pay_'))
-    application.add_handler(CallbackQueryHandler(final_approve, pattern='^approvelink_'))
-    application.add_handler(CallbackQueryHandler(reject_payment, pattern='^rejectpay_'))
+    # Callbacks
     application.add_handler(CallbackQueryHandler(admin_approve, pattern='^approve_'))
     application.add_handler(CallbackQueryHandler(admin_reject, pattern='^reject_'))
+    application.add_handler(CallbackQueryHandler(show_payment_details, pattern='^pay_'))
+    application.add_handler(CallbackQueryHandler(final_approve, pattern='^finallink_'))
+    application.add_handler(CallbackQueryHandler(reject_payment, pattern='^rejectpay_'))
     
     # Payment proof handler
     application.add_handler(MessageHandler(filters.PHOTO, receive_payment_proof))
     
-    logger.info("Bot started successfully!")
+    print("🤖 Bot chal raha hai...")
     application.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
