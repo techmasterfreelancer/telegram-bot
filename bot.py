@@ -15,10 +15,12 @@ ADMIN_ID = 7291034213
 TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK_HERE"
 
+# Binance Details - UPDATED
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
 BINANCE_ID = "1129541950"
-BINANCE_NETWORK = "TRC20"
+BINANCE_USDT_TRC20 = "TM6w24pqU7Z4FenAX4LfLHBCYB5x13XSvj"
 
+# Easypaisa Details
 EASYPAYSA_NAME = "Jaffar Ali"
 EASYPAYSA_NUMBER = "03486623402"
 
@@ -285,8 +287,8 @@ Please enter your <b>complete full name</b> as it appears on your official ID ca
 Please provide your <b>active email address</b> for important updates.
 
 {PremiumUI.info_box('REQUIREMENTS', [
-    'Must be a valid email format',
-    'Should be actively used by you',
+    'You must provide the same email address that you used to register',
+    'on our website and the same email address you used to complete your purchase',
     'Will be used for notifications'
 ], PremiumUI.ICONS['email'])}
 
@@ -302,13 +304,14 @@ Please provide your <b>active email address</b> for important updates.
 
 {PremiumUI.ICONS['crown']} <b>Step 3: Upload Purchase Proof</b>
 
-Please upload a <b>clear screenshot</b> of your purchase receipt or payment proof.
+Please upload a <b>clear screenshot</b> as proof of your purchase.
 
 {PremiumUI.info_box('UPLOAD REQUIREMENTS', [
     'Screenshot must be clear & readable',
-    'Date and time should be visible',
-    'Transaction details must show',
-    'No edited or fake screenshots',
+    'A screenshot of the product or subscription you purchased, or',
+    'The invoice, or',
+    'The purchase receipt/slip.',
+	'Please make sure the proof is clear and readable..',
     'File size: Max 5MB'
 ], PremiumUI.ICONS['warning'])}
 
@@ -345,7 +348,7 @@ Please provide your <b>WhatsApp number</b> with country code.
 
 {PremiumUI.section('SUBMISSION DETAILS', f'''
   {PremiumUI.ICONS['info']} Status: Under Review
-  {PremiumUI.ICONS['clock']} Estimated Time: 5-15 minutes
+  {PremiumUI.ICONS['clock']} Estimated Time: 2-24 hours
   {PremiumUI.ICONS['bell']} You will receive a notification''', PremiumUI.ICONS['hourglass'])}
 
 {PremiumUI.ICONS['warning']} <i>Please do not send multiple messages</i>
