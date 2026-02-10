@@ -241,7 +241,7 @@ async def start(update: Update, context):
     
     # Welcome header
     welcome_text = f"""
-{UI.ICONS['star']} <b>Welcome to Premium Access Bot</b> {UI.ICONS['star']}
+{UI.ICONS['star']} <b>🎉 *Welcome to Premium Support Bot!* 🎉</b> {UI.ICONS['star']}
 
 Hello <b>{first_name}</b>! {UI.ICONS['welcome']}
 
@@ -378,19 +378,26 @@ async def handle_callback(update: Update, context):
     
     logger.info(f"Callback received: {data} from user {user_id}")
     
-    # Select subscription type
-    if data in ['premium', 'product']:
-        request_type = "Premium Subscription" if data == 'premium' else "Product Purchase"
-        update_user(user_id, 'request_type', request_type)
-        update_user(user_id, 'current_step', 'name_pending')
-        
-        selected_text = f"""
-{UI.ICONS['success']} <b>{request_type}</b> selected!
+TYPE_SELECTED_MESSAGE = """
+✅ *Excellent Choice!* ✅
 
-{UI.ICONS['user']} Step 1 of 4: Personal Information
+You selected: *{type}*
 
-Please enter your <b>full name</b> (as on your ID):
+📋 *Verification Process*
+We'll verify your purchase and add you to our premium community.
+
+━━━━━━━━━━━━━━━━━━━━━
+📝 *Step 1 of 4: Personal Details*
+━━━━━━━━━━━━━━━━━━━━━
+
+Please enter your *FULL NAME* (as on your ID card):
+
+_Example: Muhammad Ahmed Khan_
 """
+
+NAME_RECEIVED_MESSAGE = """
+✅ *Thank you, {name}!* ✅
+
         await query.edit_message_text(selected_text, parse_mode=ParseMode.HTML)
         return
     
