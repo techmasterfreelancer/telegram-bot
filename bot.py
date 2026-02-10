@@ -3,10 +3,9 @@ import sqlite3
 import hashlib
 import re
 import os
-import asyncio
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.constants import ParseMode
 
 # ============= CONFIGURATION =============
@@ -21,9 +20,13 @@ BINANCE_NETWORK = "TRC20"
 EASYPAYSA_NAME = "Jaffar Ali"
 EASYPAYSA_NUMBER = "03486623402"
 MEMBERSHIP_FEE = "$5 USD (Lifetime)"
+
 # ========================================
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 DB_PATH = 'bot.db'
@@ -32,27 +35,13 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY, 
-        username TEXT, 
-        full_name TEXT, 
-        email TEXT,
-        whatsapp TEXT, 
-        request_type TEXT, 
-        proof_file_id TEXT, 
-        current_step TEXT DEFAULT 'start',
-        payment_method TEXT, 
-        payment_file_id TEXT, 
-        payment_hash TEXT UNIQUE,
-        status TEXT DEFAULT 'new', 
-        admin_approved INTEGER DEFAULT 0,
-        created_at TIMESTAMP, 
-        updated_at TIMESTAMP)''')
-    
+        user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, email TEXT,
+        whatsapp TEXT, request_type TEXT, proof_file_id TEXT, current_step TEXT DEFAULT 'start',
+        payment_method TEXT, payment_file_id TEXT, payment_hash TEXT UNIQUE,
+        status TEXT DEFAULT 'new', admin_approved INTEGER DEFAULT 0,
+        created_at TIMESTAMP, updated_at TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS screenshots (
-        id INTEGER PRIMARY KEY, 
-        file_hash TEXT UNIQUE, 
-        user_id INTEGER, 
-        used_at TIMESTAMP)''')
+        id INTEGER PRIMARY KEY, file_hash TEXT UNIQUE, user_id INTEGER, used_at TIMESTAMP)''')
     conn.commit()
     conn.close()
 
@@ -75,8 +64,7 @@ def create_user(user_id, username):
     now = datetime.now()
     c.execute('''INSERT OR IGNORE INTO users 
         (user_id, username, current_step, status, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        (user_id, username, 'start', 'new', now, now))
+        VALUES (?, ?, ?, ?, ?, ?)''', (user_id, username, 'start', 'new', now, now))
     conn.commit()
     conn.close()
 
@@ -185,25 +173,6 @@ SUBMITTED_MESSAGE = """
 ⚠️ *Please do not send multiple applications.*
 """
 
-ADMIN_NOTIFICATION = """
-🚨 *NEW APPLICATION RECEIVED* 🚨
-
-📋 *Application Details:*
-━━━━━━━━━━━━━━━━━━━━━
-👤 *Username:* @{username}
-🆔 *User ID:* `{user_id}`
-📌 *Type:* {request_type}
-━━━━━━━━━━━━━━━━━━━━━
-📝 *Personal Info:*
-• Name: {full_name}
-• Email: {email}
-📱 *WhatsApp:* {whatsapp}
-━━━━━━━━━━━━━━━━━━━━━
-⏰ *Submitted:* {time}
-
-👇 *Please review and take action:*
-"""
-
 PAYMENT_REQUEST_MESSAGE = """
 🎉 *CONGRATULATIONS! APPROVED!* 🎉
 
@@ -235,20 +204,6 @@ PAYMENT_CONFIRMED_MESSAGE = """
 • Keep your notification on!
 
 🔔 *You'll be notified soon!*
-"""
-
-ADMIN_PAYMENT_NOTIFICATION = """
-💰 *NEW PAYMENT FOR VERIFICATION* 💰
-
-👤 *User:* @{username}
-🆔 *ID:* `{user_id}`
-📝 *Name:* {full_name}
-📧 *Email:* {email}
-📱 *WhatsApp:* {whatsapp}
-💳 *Method:* {method}
-⏰ *Received:* {time}
-
-👇 *Please verify payment and take action:*
 """
 
 SUCCESS_MESSAGE = """
@@ -586,7 +541,7 @@ async def handle_text(update: Update, context):
         )
         return
     
-    # Handle WhatsApp Number - FINAL STEP
+    # Handle WhatsApp Number - FINAL STEP WITH ADMIN NOTIFICATION
     if step == 'whatsapp_pending':
         clean = re.sub(r'[\s\-\(\)\.]', '', text)
         if not re.match(r'^\+\d{10,15}$', clean):
@@ -609,9 +564,11 @@ async def handle_text(update: Update, context):
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # ==================== ADMIN NOTIFICATION ====================
+        # ==================== ADMIN NOTIFICATION (FIXED) ====================
+        logger.info(f"📤 Sending admin notification for user {user_id}")
+        
         try:
-            # Fresh data fetch karo taake sab kuch updated ho
+            # Fresh data fetch
             fresh_data = get_user(user_id)
             time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
@@ -623,43 +580,55 @@ async def handle_text(update: Update, context):
                 ]
             ]
             
-            # Admin message prepare karo
-            admin_msg = ADMIN_NOTIFICATION.format(
-                username=fresh_data[1] or "No username",
-                user_id=user_id,
-                request_type=fresh_data[5] or "Not specified",
-                full_name=fresh_data[2] or "Not provided",
-                email=fresh_data[3] or "Not provided",
-                whatsapp=clean,
-                time=time_now
-            )
+            # Admin message - SIMPLE & WORKING (Purane code jaisa)
+            admin_text = f"""
+🚨 *NEW APPLICATION RECEIVED* 🚨
+
+📋 *Application Details:*
+━━━━━━━━━━━━━━━━━━━━━
+👤 *Username:* @{fresh_data[1] or 'N/A'}
+🆔 *User ID:* `{user_id}`
+📌 *Type:* {fresh_data[5] or 'Not specified'}
+━━━━━━━━━━━━━━━━━━━━━
+📝 *Personal Info:*
+• Name: {fresh_data[2] or 'Not provided'}
+• Email: {fresh_data[3] or 'Not provided'}
+📱 *WhatsApp:* {clean}
+━━━━━━━━━━━━━━━━━━━━━
+⏰ *Submitted:* {time_now}
+
+👇 *Please review and take action:*
+"""
             
-            # Agar proof screenshot hai toh photo ke saath bhejo
-            if fresh_data[6]:  # proof_file_id exists
+            logger.info(f"📨 Sending to ADMIN_ID: {ADMIN_ID}")
+            
+            # Send notification (Purane code jaisa simple tarika)
+            if fresh_data[6]:  # proof exists
                 await context.bot.send_photo(
                     chat_id=ADMIN_ID,
                     photo=fresh_data[6],
-                    caption=admin_msg,
+                    caption=admin_text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode=ParseMode.MARKDOWN
                 )
-                logger.info(f"✅ Admin notified with photo for user {user_id}")
+                logger.info(f"✅ Admin notified WITH PHOTO for user {user_id}")
             else:
-                # Sirf text bhejo
                 await context.bot.send_message(
                     chat_id=ADMIN_ID,
-                    text=admin_msg,
+                    text=admin_text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode=ParseMode.MARKDOWN
                 )
-                logger.info(f"✅ Admin notified with text for user {user_id}")
+                logger.info(f"✅ Admin notified with TEXT for user {user_id}")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to notify admin: {e}")
-            # User ko batao ke admin ko message nahi gaya
+            logger.error(f"❌ FAILED to notify admin: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            
             await update.message.reply_text(
-                "⚠️ *Warning:* There was an issue notifying admin automatically.\n"
-                "Please contact admin manually if you don't hear back within 24 hours.",
+                "⚠️ *Warning:* Application saved but admin notification failed.\n"
+                "Please contact admin manually.",
                 parse_mode=ParseMode.MARKDOWN
             )
         return
@@ -701,7 +670,7 @@ async def handle_photo(update: Update, context):
     admin_approved = user_data[12]
     status = user_data[11]
     
-    # First proof screenshot (purchase proof)
+    # First proof screenshot
     if step == 'proof_pending':
         file_id = update.message.photo[-1].file_id
         
@@ -714,11 +683,11 @@ async def handle_photo(update: Update, context):
         )
         return
     
-    # Payment proof screenshot
+    # Payment proof
     if admin_approved == 1 and status == 'payment_pending':
         photo = update.message.photo[-1]
         
-        # Check for duplicate screenshot
+        # Check duplicate
         file = await photo.get_file()
         bytes_data = await file.download_as_bytearray()
         hash_val = hashlib.md5(bytes_data).hexdigest()
@@ -734,7 +703,6 @@ async def handle_photo(update: Update, context):
             conn.close()
             return
         
-        # Save screenshot hash and update user
         c.execute("INSERT INTO screenshots (file_hash, user_id, used_at) VALUES (?, ?, ?)", 
                   (hash_val, user_id, datetime.now()))
         c.execute("""UPDATE users 
@@ -761,20 +729,24 @@ async def handle_photo(update: Update, context):
                 ]
             ]
             
-            admin_msg = ADMIN_PAYMENT_NOTIFICATION.format(
-                username=user_data[1] or "No username",
-                user_id=user_id,
-                full_name=user_data[2] or "Not provided",
-                email=user_data[3] or "Not provided",
-                whatsapp=user_data[4] or "Not provided",
-                method=user_data[8] or "Not specified",
-                time=time_now
-            )
+            admin_text = f"""
+💰 *NEW PAYMENT FOR VERIFICATION* 💰
+
+👤 *User:* @{user_data[1] or 'N/A'}
+🆔 *ID:* `{user_id}`
+📝 *Name:* {user_data[2] or 'Not provided'}
+📧 *Email:* {user_data[3] or 'Not provided'}
+📱 *WhatsApp:* {user_data[4] or 'Not provided'}
+💳 *Method:* {user_data[8] or 'Not specified'}
+⏰ *Received:* {time_now}
+
+👇 *Please verify payment and take action:*
+"""
             
             await context.bot.send_photo(
                 chat_id=ADMIN_ID,
                 photo=photo.file_id,
-                caption=admin_msg,
+                caption=admin_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -785,6 +757,8 @@ async def handle_photo(update: Update, context):
         return
 
 def main():
+    logger.info(f"🤖 Bot starting with ADMIN_ID: {ADMIN_ID}")
+    
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
@@ -792,8 +766,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
-    print("🤖 Bot Started Successfully!")
-    print("✅ Admin notifications enabled")
+    logger.info("✅ All handlers registered")
+    logger.info("🚀 Starting polling...")
     application.run_polling()
 
 if __name__ == '__main__':
