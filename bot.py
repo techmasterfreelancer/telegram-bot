@@ -180,16 +180,6 @@ SUBMITTED_MESSAGE = """
 ⚠️ *Please do not send multiple applications.*
 """
 
-        )
-        
-        # Send to admin for final verification
-        keyboard = [
-            [
-                InlineKeyboardButton(f"{UI.ICONS['success']} Approve & Send Links", callback_data=f'final_{user_id}'),
-                InlineKeyboardButton(f"{UI.ICONS['error']} Reject Payment", callback_data=f'rejectpay_{user_id}')
-            ]
-        ]
-
 📋 *Application Details:*
 ━━━━━━━━━━━━━━━━━━━━━
 👤 *Username:* @{username}
@@ -606,17 +596,22 @@ async def handle_text(update: Update, context):
             return
         
         update_user(user_id, 'whatsapp', clean)
-        update_user(user_id, 'current_step', 'info_submitted')
-        
-        # Send confirmation to user
-        await update.message.reply_text(
-            SUBMITTED_MESSAGE,
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Send detailed notification to admin
-        time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+update_user(user_id, 'current_step', 'info_submitted')
+
+# 🔥 GET FRESH UPDATED DATA FROM DB
+updated_user_data = get_user(user_id)
+
+# Send confirmation to user
+await update.message.reply_text(
+    SUBMITTED_MESSAGE,
+    parse_mode=ParseMode.MARKDOWN
+)
+
+# Send detailed notification to admin
+time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        photo=updated_user_data[6],
+
         keyboard = [
             [
                 InlineKeyboardButton("✅ APPROVE", callback_data=f'approve_{user_id}'),
@@ -625,19 +620,20 @@ async def handle_text(update: Update, context):
         ]
         
         admin_msg = ADMIN_NOTIFICATION.format(
-            username=user_data[1],
-            user_id=user_id,
-            request_type=user_data[5],
-            full_name=user_data[2],
-            email=user_data[3],
-            whatsapp=clean,
-            time=time_now
+    username=updated_user_data[1],
+    user_id=user_id,
+    request_type=updated_user_data[5],
+    full_name=updated_user_data[2],
+    email=updated_user_data[3],
+    whatsapp=clean,
+    time=time_now
+)
         )
         
-        if user_data[6]:  # proof exists
+        if updated_user_data[6]: # proof exists
             await context.bot.send_photo(
                 chat_id=ADMIN_ID,
-                photo=user_data[6],
+                photo=updated_user_data[6],
                 caption=admin_msg,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
