@@ -9,16 +9,15 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from telegram.constants import ParseMode
 
 # ============= CONFIGURATION =============
-# Railway pe Environment Variables se lenge, nahi toh yahan se
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN', '8535390425:AAGdysiGhg5y82rCLkVi2t2yJGGhCXXlnIY')
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '7291034213'))
 TELEGRAM_GROUP_LINK = os.environ.get('TELEGRAM_GROUP_LINK', 'https://t.me/+P8gZuIBH75RiOThk')
-# PAYMENT DETAILS
+
 BINANCE_EMAIL = os.environ.get('BINANCE_EMAIL', 'techmasterfreelancer@gmail.com')
 BINANCE_ID = os.environ.get('BINANCE_ID', '1129541950')
 BINANCE_NETWORK = os.environ.get('BINANCE_NETWORK', 'TRC20')
-WALLET_ADDRESS = os.environ.get('TWzf9VJmr2mhq5H8Xa3bLhbb8dwmWdG9B7')
+Wallet_Address = os.environ.get('USDT', 'TWzf9VJmr2mhq5H8Xa3bLhbb8dwmWdG9B7')
 
 EASYPAYSA_NAME = os.environ.get('EASYPAYSA_NAME', 'Jaffar Ali')
 EASYPAYSA_NUMBER = os.environ.get('EASYPAYSA_NUMBER', '03486623402')
@@ -32,8 +31,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# ============= DATABASE =============
 
 DB_PATH = 'bot.db'
 
@@ -122,11 +119,7 @@ def save_hash(file_hash, user_id):
     finally:
         conn.close()
 
-# ============= STATES =============
-
-SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW, SELECT_PAYMENT, GET_PAYMENT_PROOF = range(8)
-
-# ============= START =============
+SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW = range(6)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -167,7 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
-        return SELECT_PAYMENT
+        return ConversationHandler.END
     
     if step == 'info_submitted' and admin_approved == 0:
         await update.message.reply_text(
@@ -230,8 +223,6 @@ async def send_welcome(update, first_name):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ============= TYPE SELECTION =============
-
 async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -248,8 +239,6 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_NAME
-
-# ============= COLLECT INFO =============
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -329,7 +318,6 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Send to admin
     user_data = get_user(user_id)
     
     keyboard = [
@@ -374,12 +362,20 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ============= ADMIN ACTIONS =============
 
 async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """First approval - send payment request"""
     query = update.callback_query
     await query.answer()
     
     try:
-        user_id = int(query.data.split('_')[1])
+        # Extract user_id from callback_data
+        data_parts = query.data.split('_')
+        if len(data_parts) < 2:
+            await query.edit_message_text("Error: Invalid callback data")
+            return
         
+        user_id = int(data_parts[1])
+        
+        # Update database
         conn = get_db()
         c = conn.cursor()
         c.execute("UPDATE users SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending', updated_at = ? WHERE user_id = ?",
@@ -387,6 +383,7 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         conn.close()
         
+        # Send payment request to user
         keyboard = [
             [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
             [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
@@ -408,6 +405,7 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
         
+        # Update admin message
         await query.edit_message_text(
             f"✅ Approved! User {user_id} has been notified to complete payment.",
             parse_mode=ParseMode.MARKDOWN
@@ -415,14 +413,20 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in admin_approve: {e}")
-        await query.edit_message_text(f"Error: {e}")
+        await query.edit_message_text(f"Error: {str(e)}")
 
 async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reject application"""
     query = update.callback_query
     await query.answer()
     
     try:
-        user_id = int(query.data.split('_')[1])
+        data_parts = query.data.split('_')
+        if len(data_parts) < 2:
+            await query.edit_message_text("Error: Invalid callback data")
+            return
+        
+        user_id = int(data_parts[1])
         context.user_data['reject_user_id'] = user_id
         
         await query.edit_message_text(
@@ -433,9 +437,10 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in admin_reject: {e}")
-        await query.edit_message_text(f"Error: {e}")
+        await query.edit_message_text(f"Error: {str(e)}")
 
 async def handle_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle rejection reason"""
     reason = update.message.text
     user_id = context.user_data.get('reject_user_id')
     
@@ -463,15 +468,15 @@ You can apply again by sending /start
 # ============= PAYMENT FLOW =============
 
 async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show payment details"""
     query = update.callback_query
     await query.answer()
     
-    method = query.data.split('_')[1]
     user_id = update.effective_user.id
     
-    update_user(user_id, 'payment_method', method.capitalize())
-    
-    if method == 'binance':
+    # Get method from callback_data
+    if query.data == 'pay_binance':
+        method = 'Binance'
         details = f"""
 💰 BINANCE PAYMENT DETAILS
 
@@ -484,6 +489,7 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
 ✅ After payment, please send the screenshot here.
         """
     else:
+        method = 'Easypaisa'
         details = f"""
 📱 EASYPAYSA PAYMENT DETAILS
 
@@ -495,15 +501,19 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
 ✅ After payment, please send the screenshot here.
         """
     
+    update_user(user_id, 'payment_method', method)
+    
     await context.bot.send_message(
         chat_id=user_id,
         text=details,
         parse_mode=ParseMode.MARKDOWN
     )
     
+    # Store that we're waiting for payment proof
     context.user_data[f'awaiting_payment_{user_id}'] = True
 
 async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Receive payment screenshot"""
     user_id = update.effective_user.id
     
     user_data = get_user(user_id)
@@ -514,6 +524,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     status = user_data[11]
     admin_approved = user_data[12]
     
+    # Only process if admin approved and payment pending
     if not (admin_approved == 1 and status == 'payment_pending'):
         return
     
@@ -549,6 +560,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
         parse_mode=ParseMode.MARKDOWN
     )
     
+    # Send to admin with APPROVE and REJECT buttons
     keyboard = [
         [
             InlineKeyboardButton("✅ Approve & Send Links", callback_data=f'approvelink_{user_id}'),
@@ -579,12 +591,20 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """FINAL APPROVAL - Send group links"""
     query = update.callback_query
     await query.answer()
     
     try:
-        user_id = int(query.data.split('_')[1])
+        # Extract user_id
+        data_parts = query.data.split('_')
+        if len(data_parts) < 2:
+            await query.edit_message_text("Error: Invalid callback data")
+            return
         
+        user_id = int(data_parts[1])
+        
+        # Update database
         conn = get_db()
         c = conn.cursor()
         c.execute("UPDATE users SET status = 'completed', current_step = 'completed', updated_at = ? WHERE user_id = ?",
@@ -592,6 +612,7 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         conn.close()
         
+        # Send links to user
         await context.bot.send_message(
             chat_id=user_id,
             text=f"""
@@ -617,6 +638,7 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
             disable_web_page_preview=False
         )
         
+        # Update admin message
         await query.edit_message_text(
             f"✅ User {user_id} fully approved!\nBoth group links sent.",
             parse_mode=ParseMode.MARKDOWN
@@ -624,14 +646,20 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in final_approve: {e}")
-        await query.edit_message_text(f"Error: {e}")
+        await query.edit_message_text(f"Error: {str(e)}")
 
 async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reject payment"""
     query = update.callback_query
     await query.answer()
     
     try:
-        user_id = int(query.data.split('_')[1])
+        data_parts = query.data.split('_')
+        if len(data_parts) < 2:
+            await query.edit_message_text("Error: Invalid callback data")
+            return
+        
+        user_id = int(data_parts[1])
         context.user_data['reject_user_id'] = user_id
         
         await query.edit_message_text(
@@ -642,7 +670,7 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Error in reject_payment: {e}")
-        await query.edit_message_text(f"Error: {e}")
+        await query.edit_message_text(f"Error: {str(e)}")
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Cancelled.\nSend /start to begin again.")
@@ -668,12 +696,12 @@ def main():
     
     application.add_handler(conv_handler)
     
-    # Admin callbacks - FIXED PATTERNS
-    application.add_handler(CallbackQueryHandler(admin_approve, pattern='^approve_\\d+$'))
-    application.add_handler(CallbackQueryHandler(admin_reject, pattern='^reject_\\d+$'))
+    # ALL CALLBACK HANDLERS - FIXED ORDER AND PATTERNS
     application.add_handler(CallbackQueryHandler(show_payment_details, pattern='^pay_'))
-    application.add_handler(CallbackQueryHandler(final_approve, pattern='^approvelink_\\d+$'))
-    application.add_handler(CallbackQueryHandler(reject_payment, pattern='^rejectpay_\\d+$'))
+    application.add_handler(CallbackQueryHandler(final_approve, pattern='^approvelink_'))
+    application.add_handler(CallbackQueryHandler(reject_payment, pattern='^rejectpay_'))
+    application.add_handler(CallbackQueryHandler(admin_approve, pattern='^approve_'))
+    application.add_handler(CallbackQueryHandler(admin_reject, pattern='^reject_'))
     
     # Payment proof handler
     application.add_handler(MessageHandler(filters.PHOTO, receive_payment_proof))
