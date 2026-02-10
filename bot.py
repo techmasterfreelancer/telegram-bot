@@ -9,11 +9,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 from telegram.constants import ParseMode
 
-# ============= YOUR DETAILS =============
+# ============= CONFIGURATION =============
 BOT_TOKEN = "8535390425:AAH4RF9v6k8H6fMQeXr_OQ6JuB7PV8gvgLs"
 ADMIN_ID = 7291034213
-TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk "
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK "
+TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
 
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
 BINANCE_ID = "1129541950"
@@ -22,7 +21,6 @@ BINANCE_NETWORK = "TRC20"
 EASYPAYSA_NAME = "Jaffar Ali"
 EASYPAYSA_NUMBER = "03486623402"
 MEMBERSHIP_FEE = "$5 USD (Lifetime)"
-
 # ========================================
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -34,12 +32,27 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, email TEXT,
-        whatsapp TEXT, request_type TEXT, proof_file_id TEXT, current_step TEXT DEFAULT 'start',
-        payment_method TEXT, payment_file_id TEXT, payment_hash TEXT UNIQUE,
-        status TEXT DEFAULT 'new', admin_approved INTEGER DEFAULT 0,
-        created_at TIMESTAMP, updated_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS screenshots (id INTEGER PRIMARY KEY, file_hash TEXT UNIQUE, user_id INTEGER, used_at TIMESTAMP)''')
+        user_id INTEGER PRIMARY KEY, 
+        username TEXT, 
+        full_name TEXT, 
+        email TEXT,
+        whatsapp TEXT, 
+        request_type TEXT, 
+        proof_file_id TEXT, 
+        current_step TEXT DEFAULT 'start',
+        payment_method TEXT, 
+        payment_file_id TEXT, 
+        payment_hash TEXT UNIQUE,
+        status TEXT DEFAULT 'new', 
+        admin_approved INTEGER DEFAULT 0,
+        created_at TIMESTAMP, 
+        updated_at TIMESTAMP)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS screenshots (
+        id INTEGER PRIMARY KEY, 
+        file_hash TEXT UNIQUE, 
+        user_id INTEGER, 
+        used_at TIMESTAMP)''')
     conn.commit()
     conn.close()
 
@@ -59,31 +72,23 @@ def get_user(user_id):
 def create_user(user_id, username):
     conn = get_db()
     c = conn.cursor()
-    c.execute('INSERT OR IGNORE INTO users (user_id, username, current_step, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-              (user_id, username, 'start', 'new', datetime.now(), datetime.now()))
+    now = datetime.now()
+    c.execute('''INSERT OR IGNORE INTO users 
+        (user_id, username, current_step, status, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, ?)''',
+        (user_id, username, 'start', 'new', now, now))
     conn.commit()
     conn.close()
 
 def update_user(user_id, field, value):
     conn = get_db()
     c = conn.cursor()
-    c.execute(f"UPDATE users SET {field} = ?, updated_at = ? WHERE user_id = ?", (value, datetime.now(), user_id))
+    c.execute(f"UPDATE users SET {field} = ?, updated_at = ? WHERE user_id = ?", 
+              (value, datetime.now(), user_id))
     conn.commit()
     conn.close()
 
-def save_hash(file_hash, user_id):
-    conn = get_db()
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO screenshots (file_hash, user_id, used_at) VALUES (?, ?, ?)", (file_hash, user_id, datetime.now()))
-        conn.commit()
-        return True
-    except:
-        return False
-    finally:
-        conn.close()
-
-# ============= PROFESSIONAL MESSAGES =============
+# ============= MESSAGES =============
 
 WELCOME_MESSAGE = """
 🎉 *Welcome to Premium Support Bot!* 🎉
@@ -226,7 +231,7 @@ PAYMENT_CONFIRMED_MESSAGE = """
 
 ⚠️ *Important:*
 • Fake screenshots = Permanent ban
-• You'll receive group links once verified
+• You'll receive group link once verified
 • Keep your notification on!
 
 🔔 *You'll be notified soon!*
@@ -254,14 +259,11 @@ SUCCESS_MESSAGE = """
 🎉 *You are now a Premium Member!*
 
 ━━━━━━━━━━━━━━━━━━━━━
-🔗 *YOUR ACCESS LINKS*
+🔗 *YOUR ACCESS LINK*
 ━━━━━━━━━━━━━━━━━━━━━
 
 📱 *Telegram Premium Group:*
 {telegram_link}
-
-💬 *WhatsApp Group:*
-{whatsapp_link}
 
 ━━━━━━━━━━━━━━━━━━━━━
 📅 *Live Sessions:*
@@ -269,7 +271,7 @@ Every Sunday at 10:00 PM Pakistan Time
 Platform: GoTo Meeting App
 
 ⚠️ *IMPORTANT RULES:*
-• ❌ Do NOT share these links with anyone
+• ❌ Do NOT share this link with anyone
 • ❌ Do NOT add fake members
 • ✅ Follow all group rules
 • ✅ Be respectful to all members
@@ -280,7 +282,7 @@ Platform: GoTo Meeting App
 💬 *Need help?* Contact admin anytime!
 """
 
-# ============= BOT FUNCTIONS =============
+# ============= HANDLERS =============
 
 async def start(update: Update, context):
     user = update.effective_user
@@ -309,8 +311,7 @@ async def start(update: Update, context):
     if status == 'completed':
         await update.message.reply_text(
             f"✅ *Welcome back {first_name}!*\n\nYou already have premium access.\n\n"
-            f"🔗 *Telegram:* {TELEGRAM_GROUP_LINK}\n"
-            f"📱 *WhatsApp:* {WHATSAPP_GROUP_LINK}",
+            f"🔗 *Telegram:* {TELEGRAM_GROUP_LINK}",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -343,12 +344,12 @@ async def start(update: Update, context):
         await update.message.reply_text(
             "⏳ *Payment Verification in Progress*\n\n"
             "Admin is verifying your payment.\n"
-            "You'll receive links soon!",
+            "You'll receive link soon!",
             parse_mode=ParseMode.MARKDOWN
         )
         return
     
-    # Resume
+    # Resume incomplete application
     if step == 'name_pending':
         await update.message.reply_text(
             f"🔄 *Continue Application*\n\n"
@@ -407,7 +408,7 @@ async def handle_callback(update: Update, context):
         )
         return
     
-    # Payment selection
+    # Payment method selection
     if data.startswith('pay_'):
         method = data.split('_')[1]
         update_user(user_id, 'payment_method', method.capitalize())
@@ -444,7 +445,9 @@ async def handle_callback(update: Update, context):
             
             conn = get_db()
             c = conn.cursor()
-            c.execute("UPDATE users SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending' WHERE user_id = ?", (target_id,))
+            c.execute("""UPDATE users 
+                SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending' 
+                WHERE user_id = ?""", (target_id,))
             conn.commit()
             conn.close()
             
@@ -468,6 +471,7 @@ async def handle_callback(update: Update, context):
             )
             
         except Exception as e:
+            logger.error(f"Error in approve: {e}")
             await query.edit_message_text(f"❌ Error: {e}")
         return
     
@@ -487,7 +491,7 @@ async def handle_callback(update: Update, context):
             await query.edit_message_text(f"❌ Error: {e}")
         return
     
-    # FINAL APPROVE - Send links
+    # Final approve - send group link
     if data.startswith('final_'):
         try:
             target_id = int(data.split('_')[1])
@@ -500,10 +504,7 @@ async def handle_callback(update: Update, context):
             
             await context.bot.send_message(
                 chat_id=target_id,
-                text=SUCCESS_MESSAGE.format(
-                    telegram_link=TELEGRAM_GROUP_LINK,
-                    whatsapp_link=WHATSAPP_GROUP_LINK
-                ),
+                text=SUCCESS_MESSAGE.format(telegram_link=TELEGRAM_GROUP_LINK),
                 parse_mode=ParseMode.MARKDOWN,
                 disable_web_page_preview=False
             )
@@ -511,7 +512,7 @@ async def handle_callback(update: Update, context):
             await query.edit_message_text(
                 f"✅ *PAYMENT APPROVED!*\n\n"
                 f"User `{target_id}` has been verified.\n"
-                f"🎉 Group links sent successfully!\n\n"
+                f"🎉 Group link sent successfully!\n\n"
                 f"Status: COMPLETED ✅",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -547,7 +548,7 @@ async def handle_text(update: Update, context):
     
     step = user_data[7]
     
-    # Name
+    # Handle Name
     if step == 'name_pending':
         if len(text) < 3:
             await update.message.reply_text(
@@ -565,7 +566,7 @@ async def handle_text(update: Update, context):
         )
         return
     
-    # Email
+    # Handle Email
     if step == 'email_pending':
         email = text.lower().strip()
         if "@" not in email or "." not in email:
@@ -585,7 +586,7 @@ async def handle_text(update: Update, context):
         )
         return
     
-    # WhatsApp
+    # Handle WhatsApp Number - FINAL STEP
     if step == 'whatsapp_pending':
         clean = re.sub(r'[\s\-\(\)\.]', '', text)
         if not re.match(r'^\+\d{10,15}$', clean):
@@ -598,6 +599,7 @@ async def handle_text(update: Update, context):
             )
             return
         
+        # Save WhatsApp number
         update_user(user_id, 'whatsapp', clean)
         update_user(user_id, 'current_step', 'info_submitted')
         
@@ -607,31 +609,33 @@ async def handle_text(update: Update, context):
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Send detailed notification to admin - REFRESHED DATA
-        time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # FRESH DATABASE SE DATA LO - taake latest info ho
-        fresh_data = get_user(user_id)
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ APPROVE", callback_data=f'approve_{user_id}'),
-                InlineKeyboardButton("❌ REJECT", callback_data=f'reject_{user_id}')
-            ]
-        ]
-        
-        admin_msg = ADMIN_NOTIFICATION.format(
-            username=fresh_data[1] or "No username",
-            user_id=user_id,
-            request_type=fresh_data[5] or "Not specified",
-            full_name=fresh_data[2] or "Not provided",
-            email=fresh_data[3] or "Not provided",
-            whatsapp=clean,
-            time=time_now
-        )
-        
+        # ==================== ADMIN NOTIFICATION ====================
         try:
-            if fresh_data[6]:  # proof exists
+            # Fresh data fetch karo taake sab kuch updated ho
+            fresh_data = get_user(user_id)
+            time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Admin buttons
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ APPROVE", callback_data=f'approve_{user_id}'),
+                    InlineKeyboardButton("❌ REJECT", callback_data=f'reject_{user_id}')
+                ]
+            ]
+            
+            # Admin message prepare karo
+            admin_msg = ADMIN_NOTIFICATION.format(
+                username=fresh_data[1] or "No username",
+                user_id=user_id,
+                request_type=fresh_data[5] or "Not specified",
+                full_name=fresh_data[2] or "Not provided",
+                email=fresh_data[3] or "Not provided",
+                whatsapp=clean,
+                time=time_now
+            )
+            
+            # Agar proof screenshot hai toh photo ke saath bhejo
+            if fresh_data[6]:  # proof_file_id exists
                 await context.bot.send_photo(
                     chat_id=ADMIN_ID,
                     photo=fresh_data[6],
@@ -639,25 +643,28 @@ async def handle_text(update: Update, context):
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode=ParseMode.MARKDOWN
                 )
+                logger.info(f"✅ Admin notified with photo for user {user_id}")
             else:
+                # Sirf text bhejo
                 await context.bot.send_message(
                     chat_id=ADMIN_ID,
                     text=admin_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode=ParseMode.MARKDOWN
                 )
-            logger.info(f"✅ Admin notification sent successfully for user {user_id}")
+                logger.info(f"✅ Admin notified with text for user {user_id}")
+                
         except Exception as e:
-            logger.error(f"❌ Failed to send admin notification: {e}")
-            # Agar admin ko message nahi gaya toh user ko bata dein
+            logger.error(f"❌ Failed to notify admin: {e}")
+            # User ko batao ke admin ko message nahi gaya
             await update.message.reply_text(
-                "⚠️ *Note:* There was an issue notifying admin, but your application is saved.\n"
-                "Please contact admin if you don't hear back within 24 hours.",
+                "⚠️ *Warning:* There was an issue notifying admin automatically.\n"
+                "Please contact admin manually if you don't hear back within 24 hours.",
                 parse_mode=ParseMode.MARKDOWN
             )
         return
     
-    # Rejection reason
+    # Handle Rejection Reason
     if 'reject_id' in context.user_data:
         target_id = context.user_data['reject_id']
         
@@ -694,7 +701,7 @@ async def handle_photo(update: Update, context):
     admin_approved = user_data[12]
     status = user_data[11]
     
-    # First proof
+    # First proof screenshot (purchase proof)
     if step == 'proof_pending':
         file_id = update.message.photo[-1].file_id
         
@@ -707,11 +714,11 @@ async def handle_photo(update: Update, context):
         )
         return
     
-    # Payment proof
+    # Payment proof screenshot
     if admin_approved == 1 and status == 'payment_pending':
         photo = update.message.photo[-1]
         
-        # Check duplicate
+        # Check for duplicate screenshot
         file = await photo.get_file()
         bytes_data = await file.download_as_bytearray()
         hash_val = hashlib.md5(bytes_data).hexdigest()
@@ -727,9 +734,13 @@ async def handle_photo(update: Update, context):
             conn.close()
             return
         
-        c.execute("INSERT INTO screenshots (file_hash, user_id, used_at) VALUES (?, ?, ?)", (hash_val, user_id, datetime.now()))
-        c.execute("UPDATE users SET payment_file_id = ?, payment_hash = ?, current_step = 'payment_submitted', status = 'payment_verification' WHERE user_id = ?",
-                  (photo.file_id, hash_val, user_id))
+        # Save screenshot hash and update user
+        c.execute("INSERT INTO screenshots (file_hash, user_id, used_at) VALUES (?, ?, ?)", 
+                  (hash_val, user_id, datetime.now()))
+        c.execute("""UPDATE users 
+            SET payment_file_id = ?, payment_hash = ?, current_step = 'payment_submitted', status = 'payment_verification' 
+            WHERE user_id = ?""",
+            (photo.file_id, hash_val, user_id))
         conn.commit()
         conn.close()
         
@@ -739,33 +750,38 @@ async def handle_photo(update: Update, context):
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Send to admin with BIG buttons
-        time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ APPROVE & SEND LINKS", callback_data=f'final_{user_id}'),
-                InlineKeyboardButton("❌ REJECT PAYMENT", callback_data=f'rejectpay_{user_id}')
+        # Notify admin about payment
+        try:
+            time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ APPROVE & SEND LINKS", callback_data=f'final_{user_id}'),
+                    InlineKeyboardButton("❌ REJECT PAYMENT", callback_data=f'rejectpay_{user_id}')
+                ]
             ]
-        ]
-        
-        admin_msg = ADMIN_PAYMENT_NOTIFICATION.format(
-            username=user_data[1],
-            user_id=user_id,
-            full_name=user_data[2],
-            email=user_data[3],
-            whatsapp=user_data[4],
-            method=user_data[8] or "Not specified",
-            time=time_now
-        )
-        
-        await context.bot.send_photo(
-            chat_id=ADMIN_ID,
-            photo=photo.file_id,
-            caption=admin_msg,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.MARKDOWN
-        )
+            
+            admin_msg = ADMIN_PAYMENT_NOTIFICATION.format(
+                username=user_data[1] or "No username",
+                user_id=user_id,
+                full_name=user_data[2] or "Not provided",
+                email=user_data[3] or "Not provided",
+                whatsapp=user_data[4] or "Not provided",
+                method=user_data[8] or "Not specified",
+                time=time_now
+            )
+            
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=photo.file_id,
+                caption=admin_msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.info(f"✅ Payment notification sent to admin for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to send payment notification: {e}")
         return
 
 def main():
@@ -776,8 +792,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
-    print("🤖 Professional Bot Started!")
-    print("✅ All messages are professional and clear")
+    print("🤖 Bot Started Successfully!")
+    print("✅ Admin notifications enabled")
     application.run_polling()
 
 if __name__ == '__main__':
