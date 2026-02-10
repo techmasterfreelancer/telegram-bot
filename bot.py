@@ -1,6 +1,5 @@
 """
-Premium Support Bot - Professional Telegram Bot
-Complete working code with admin panel and user flow
+Premium Support Bot - Railway Deployment Ready
 """
 
 import logging
@@ -18,6 +17,22 @@ from telegram.ext import (
     filters
 )
 
+# ==================== CONFIGURATION ====================
+# Railway automatically provides PORT environment variable
+PORT = int(os.environ.get("PORT", 8080))
+
+# Get credentials from environment variables (Railway variables)
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8535390425:AAE-K_QBPRw7e23GoWnGzCISz7T6pjpBLjQ")
+ADMIN_IDS = [int(os.environ.get("ADMIN_ID", "7291034213"))]
+TELEGRAM_GROUP_LINK = os.environ.get("TELEGRAM_GROUP_LINK", "https://t.me/+P8gZuIBH75RiOThk")
+
+# Payment Details
+BINANCE_EMAIL = os.environ.get("BINANCE_EMAIL", "techmasterfreelancer@gmail.com")
+BINANCE_ID = os.environ.get("BINANCE_ID", "1129541950")
+EASYPAYSA_NAME = os.environ.get("EASYPAYSA_NAME", "Jaffar Ali")
+EASYPAYSA_NUMBER = os.environ.get("EASYPAYSA_NUMBER", "03486623402")
+MEMBERSHIP_FEE = os.environ.get("MEMBERSHIP_FEE", "$5 USD (Lifetime)")
+
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -25,20 +40,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== CONFIGURATION ====================
-BOT_TOKEN = "8535390425:AAE-K_QBPRw7e23GoWnGzCISz7T6pjpBLjQ"
-ADMIN_IDS = [7291034213]  # Your Telegram ID
-TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
-
-# Payment Details
-BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
-BINANCE_ID = "1129541950"
-EASYPAYSA_NAME = "Jaffar Ali"
-EASYPAYSA_NUMBER = "03486623402"
-MEMBERSHIP_FEE = "$5 USD (Lifetime)"
-
-# Database setup
-DB_FILE = 'premium_bot.db'
+# Database setup - Use /tmp for Railway (writable directory)
+DB_FILE = '/tmp/premium_bot.db'
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -889,10 +892,19 @@ def main():
     # Error handler
     application.add_error_handler(error_handler)
     
-    print("🤖 Premium Support Bot is running...")
-    print(f"👤 Admin ID: {ADMIN_IDS[0]}")
-    print(f"💾 Database: {DB_FILE}")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the bot with webhook for Railway (more stable than polling on cloud)
+    # Railway provides $PORT environment variable
+    logger.info(f"Starting bot on port {PORT}")
+    
+    # Use webhook method for production (Railway)
+    # You need to set webhook URL in environment variables or use polling for testing
+    
+    # For Railway, we'll use polling with drop_pending_updates
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        poll_interval=1.0
+    )
 
 if __name__ == '__main__':
     main()
