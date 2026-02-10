@@ -78,6 +78,57 @@ def update_user(user_id, field, value):
 
 # ================= PROFESSIONAL MESSAGES =================
 
+WELCOME_MESSAGE = """
+━━━━━━━━━━━━━━━━━━━━━━
+🎓 PREMIUM ACCESS PORTAL
+━━━━━━━━━━━━━━━━━━━━━━
+
+Welcome {name},
+
+To maintain community quality, we verify all customers before granting access.
+
+━━━━━━━━━━━━━━━━━━━━━━
+📌 SELECT YOUR PURCHASE TYPE
+━━━━━━━━━━━━━━━━━━━━━━
+"""
+
+STEP1 = """
+━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 OF 4 — FULL NAME
+━━━━━━━━━━━━━━━━━━━━━━
+Enter your complete name used during purchase.
+"""
+
+STEP2 = """
+━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 OF 4 — EMAIL CONFIRMATION
+━━━━━━━━━━━━━━━━━━━━━━
+Enter the SAME email used for registration.
+"""
+
+STEP3 = """
+━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 OF 4 — PURCHASE PROOF
+━━━━━━━━━━━━━━━━━━━━━━
+Upload a clear screenshot of your receipt.
+"""
+
+STEP4 = """
+━━━━━━━━━━━━━━━━━━━━━━
+STEP 4 OF 4 — WHATSAPP NUMBER
+━━━━━━━━━━━━━━━━━━━━━━
+Enter your WhatsApp number with country code.
+Example: +923001234567
+"""
+
+SUBMITTED = """
+━━━━━━━━━━━━━━━━━━━━━━
+✅ APPLICATION SUBMITTED
+━━━━━━━━━━━━━━━━━━━━━━
+Your request is under admin review.
+Estimated time: 2–24 hours.
+"""
+
 SUCCESS_MESSAGE = """
 ━━━━━━━━━━━━━━━━━━━━━━
 🏆 PREMIUM MEMBERSHIP ACTIVATED
