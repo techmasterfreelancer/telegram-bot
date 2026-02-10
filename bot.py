@@ -94,7 +94,7 @@ async def start(update: Update, context):
     ]
 
     await update.message.reply_text(
-        "🎉 Welcome!\n\nSelect what you purchased:",
+        "🎉 Welcome to Premium Support Bot!🎉\n\nHello {name}! 👋\n\nSelect what you purchased:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
