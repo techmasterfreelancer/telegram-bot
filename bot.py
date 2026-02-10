@@ -11,7 +11,6 @@ from telegram.constants import ParseMode
 BOT_TOKEN = "8535390425:AAH4RF9v6k8H6fMQeXr_OQ6JuB7PV8gvgLs"
 ADMIN_ID = 7291034213
 TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK"
 
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
 BINANCE_ID = "1129541950"
