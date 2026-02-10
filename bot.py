@@ -12,8 +12,8 @@ from telegram.constants import ParseMode
 # ============= YOUR DETAILS =============
 BOT_TOKEN = "8535390425:AAH4RF9v6k8H6fMQeXr_OQ6JuB7PV8gvgLs"
 ADMIN_ID = 7291034213
-TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK"
+TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk "
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK "
 
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
 BINANCE_ID = "1129541950"
@@ -607,6 +607,10 @@ async def handle_text(update: Update, context):
             parse_mode=ParseMode.MARKDOWN
         )
         
+        # ========== FIX: Fetch fresh user data from database ==========
+        # Yeh important hai taaki admin ko latest values ja sakein
+        fresh_user_data = get_user(user_id)
+        
         # Send detailed notification to admin
         time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -617,20 +621,21 @@ async def handle_text(update: Update, context):
             ]
         ]
         
+        # Use fresh_user_data instead of old user_data
         admin_msg = ADMIN_NOTIFICATION.format(
-            username=user_data[1],
+            username=fresh_user_data[1] or "No username",
             user_id=user_id,
-            request_type=user_data[5],
-            full_name=user_data[2],
-            email=user_data[3],
+            request_type=fresh_user_data[5] or "Not specified",
+            full_name=fresh_user_data[2] or "Not provided",
+            email=fresh_user_data[3] or "Not provided",
             whatsapp=clean,
             time=time_now
         )
         
-        if user_data[6]:  # proof exists
+        if fresh_user_data[6]:  # proof exists
             await context.bot.send_photo(
                 chat_id=ADMIN_ID,
-                photo=user_data[6],
+                photo=fresh_user_data[6],
                 caption=admin_msg,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
