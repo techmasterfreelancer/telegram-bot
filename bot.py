@@ -1,22 +1,23 @@
 """
 Premium Support Bot - Professional Telegram Bot for User Onboarding
-Created for Railway.app Deployment
+Created for Railway.app Deployment - FIXED VERSION
 Author: Professional Developer
 """
 
 import os
 import logging
 import asyncio
+import sqlite3
+import re
 from datetime import datetime
 from typing import Dict, Optional
+from contextlib import contextmanager
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     ConversationHandler, ContextTypes, filters
 )
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 # Enable logging
 logging.basicConfig(
@@ -34,9 +35,11 @@ BINANCE_ID = os.environ.get("BINANCE_ID", "1129541950")
 EASYPAYSA_NAME = os.environ.get("EASYPAYSA_NAME", "Jaffar Ali")
 EASYPAYSA_NUMBER = os.environ.get("EASYPAYSA_NUMBER", "03486623402")
 MEMBERSHIP_FEE = os.environ.get("MEMBERSHIP_FEE", "$5 USD (Lifetime)")
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 PORT = int(os.environ.get("PORT", "8080"))
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+
+# Database path (SQLite - no external dependencies)
+DB_PATH = os.path.join(os.path.dirname(__file__), "bot_data.db")
 
 # Conversation States
 (
@@ -44,76 +47,69 @@ PORT = int(os.environ.get("PORT", "8080"))
     PURCHASE_PROOF, WHATSAPP_NUMBER, PAYMENT_METHOD, PAYMENT_PROOF
 ) = range(7)
 
-# Database Connection
+# Database Context Manager
+@contextmanager
 def get_db_connection():
     """Create database connection"""
-    if DATABASE_URL:
-        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    else:
-        # Fallback to SQLite-like behavior with PostgreSQL
-        return psycopg2.connect(
-            host="localhost",
-            database="premium_bot",
-            user="postgres",
-            password="password",
-            cursor_factory=RealDictCursor
-        )
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 def init_database():
     """Initialize database tables"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # Users table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                telegram_id BIGINT UNIQUE NOT NULL,
-                username VARCHAR(255),
-                first_name VARCHAR(255),
-                last_name VARCHAR(255),
-                full_name VARCHAR(255),
-                email VARCHAR(255),
-                whatsapp_number VARCHAR(50),
-                purchase_type VARCHAR(50),
-                purchase_proof TEXT,
-                payment_method VARCHAR(50),
-                payment_proof TEXT,
-                status VARCHAR(50) DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Users table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE NOT NULL,
+                    username TEXT,
+                    first_name TEXT,
+                    last_name TEXT,
+                    full_name TEXT,
+                    email TEXT,
+                    whatsapp_number TEXT,
+                    purchase_type TEXT,
+                    purchase_proof TEXT,
+                    payment_method TEXT,
+                    payment_proof TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # Admin actions log
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS admin_actions (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT REFERENCES users(id),
-                action VARCHAR(50),
-                performed_by BIGINT,
-                performed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Admin actions log
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS admin_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    action TEXT,
+                    performed_by INTEGER,
+                    performed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-        logger.info("Database initialized successfully")
+            conn.commit()
+            logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Database initialization error: {e}")
 
 def get_user(telegram_id: int) -> Optional[Dict]:
     """Get user by telegram ID"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE telegram_id = %s", (telegram_id,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return dict(user) if user else None
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
+            user = cursor.fetchone()
+            return dict(user) if user else None
     except Exception as e:
         logger.error(f"Error getting user: {e}")
         return None
@@ -121,21 +117,19 @@ def get_user(telegram_id: int) -> Optional[Dict]:
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str) -> bool:
     """Create new user"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO users (telegram_id, username, first_name, last_name)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (telegram_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                first_name = EXCLUDED.first_name,
-                last_name = EXCLUDED.last_name,
-                updated_at = CURRENT_TIMESTAMP
-        """, (telegram_id, username, first_name, last_name))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO users (telegram_id, username, first_name, last_name)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(telegram_id) DO UPDATE SET
+                    username = excluded.username,
+                    first_name = excluded.first_name,
+                    last_name = excluded.last_name,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (telegram_id, username, first_name, last_name))
+            conn.commit()
+            return True
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         return False
@@ -143,22 +137,20 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
 def update_user(telegram_id: int, **kwargs) -> bool:
     """Update user fields"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        set_clause = ", ".join([f"{key} = %s" for key in kwargs.keys()])
-        values = list(kwargs.values()) + [telegram_id]
+            set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
+            values = list(kwargs.values()) + [telegram_id]
 
-        cursor.execute(f"""
-            UPDATE users 
-            SET {set_clause}, updated_at = CURRENT_TIMESTAMP 
-            WHERE telegram_id = %s
-        """, values)
+            cursor.execute(f"""
+                UPDATE users 
+                SET {set_clause}, updated_at = CURRENT_TIMESTAMP 
+                WHERE telegram_id = ?
+            """, values)
 
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
+            conn.commit()
+            return True
     except Exception as e:
         logger.error(f"Error updating user: {e}")
         return False
@@ -166,15 +158,13 @@ def update_user(telegram_id: int, **kwargs) -> bool:
 def log_admin_action(user_id: int, action: str, performed_by: int):
     """Log admin action"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO admin_actions (user_id, action, performed_by)
-            VALUES (%s, %s, %s)
-        """, (user_id, action, performed_by))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO admin_actions (user_id, action, performed_by)
+                VALUES (?, ?, ?)
+            """, (user_id, action, performed_by))
+            conn.commit()
     except Exception as e:
         logger.error(f"Error logging admin action: {e}")
 
@@ -187,10 +177,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     create_user(user.id, user.username, user.first_name, user.last_name)
 
     # Welcome message with professional formatting
-    welcome_text = f"""
+    welcome_text = """
 <b>🌟 Welcome to Premium Support Bot</b>
 
-Hello <b>{user.first_name}</b>! 👋
+Hello <b>""" + user.first_name + """</b>! 👋
 
 Aap ne hamari website se kya purchase kiya hai? <b>Subscription</b> ya koi <b>Product</b>?
 
@@ -227,7 +217,7 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     update_user(user.id, purchase_type=purchase_type)
 
     if purchase_type == "subscription":
-        message = f"""
+        message = """
 <b>🎉 Excellent Choice!</b>
 
 You selected: <b>Premium Subscription</b>
@@ -241,7 +231,7 @@ Please enter your <b>full name</b> as per your ID card.
 <i>Example: Muhammad Ali Khan</i>
 """
     else:
-        message = f"""
+        message = """
 <b>🎉 Excellent Choice!</b>
 
 You selected: <b>Product Purchase</b>
@@ -274,8 +264,8 @@ async def receive_full_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Update user
     update_user(user.id, full_name=full_name)
 
-    message = f"""
-<b>✅ Thank you, {full_name}!</b>
+    message = """
+<b>✅ Thank you, """ + full_name + """!</b>
 
 <b>Step 2 – Email Verification</b>
 
@@ -307,10 +297,10 @@ async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Update user
     update_user(user.id, email=email)
 
-    message = f"""
+    message = """
 <b>✅ Email saved!</b>
 
-Thanks for providing your email: <code>{email}</code>
+Thanks for providing your email: <code>""" + email + """</code>
 
 <b>Step 3 – Purchase Proof</b>
 
@@ -352,7 +342,7 @@ async def receive_purchase_proof(update: Update, context: ContextTypes.DEFAULT_T
     # Update user with proof
     update_user(user.id, purchase_proof=file_id)
 
-    message = f"""
+    message = """
 <b>✅ Screenshot received!</b>
 
 <b>Step 4 – WhatsApp Number</b>
@@ -391,7 +381,7 @@ async def receive_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user_data = get_user(user.id)
 
     # Send confirmation to user
-    confirmation_message = f"""
+    confirmation_message = """
 <b>🎊 Application Submitted Successfully!</b>
 
 <b>📋 What happens next:</b>
@@ -415,17 +405,17 @@ async def receive_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(confirmation_message, parse_mode="HTML")
 
     # Send notification to ADMIN with Approve/Reject buttons
-    admin_message = f"""
+    admin_message = """
 <b>🔔 NEW APPLICATION RECEIVED</b>
 
 <b>👤 User Details:</b>
-<b>Name:</b> {user_data.get('full_name', 'N/A')}
-<b>Username:</b> @{user_data.get('username', 'N/A')}
-<b>Telegram ID:</b> <code>{user.id}</code>
-<b>Email:</b> <code>{user_data.get('email', 'N/A')}</code>
-<b>WhatsApp:</b> <code>{whatsapp}</code>
-<b>Purchase Type:</b> {user_data.get('purchase_type', 'N/A').title()}
-<b>Submitted:</b> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+<b>Name:</b> """ + str(user_data.get('full_name', 'N/A')) + """
+<b>Username:</b> @""" + str(user_data.get('username', 'N/A')) + """
+<b>Telegram ID:</b> <code>""" + str(user.id) + """</code>
+<b>Email:</b> <code>""" + str(user_data.get('email', 'N/A')) + """</code>
+<b>WhatsApp:</b> <code>""" + whatsapp + """</code>
+<b>Purchase Type:</b> """ + str(user_data.get('purchase_type', 'N/A')).title() + """
+<b>Submitted:</b> """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """
 
 <b>📸 Purchase Proof:</b> Screenshot attached above
 
@@ -435,8 +425,8 @@ async def receive_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Admin keyboard with one-time buttons
     admin_keyboard = [
         [
-            InlineKeyboardButton("✅ APPROVE", callback_data=f"approve_{user.id}"),
-            InlineKeyboardButton("❌ REJECT", callback_data=f"reject_{user.id}")
+            InlineKeyboardButton("✅ APPROVE", callback_data="approve_" + str(user.id)),
+            InlineKeyboardButton("❌ REJECT", callback_data="reject_" + str(user.id))
         ]
     ]
     admin_reply_markup = InlineKeyboardMarkup(admin_keyboard)
@@ -489,17 +479,17 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log_admin_action(user_data.get('id'), 'approved', ADMIN_ID)
 
     # Send payment instructions to user
-    payment_message = f"""
+    payment_message = """
 <b>🎉 Congratulations! Your Application is APPROVED!</b>
 
-<b>💳 Community Joining Fee: {MEMBERSHIP_FEE}</b>
+<b>💳 Community Joining Fee: """ + MEMBERSHIP_FEE + """</b>
 
 Please select your preferred payment method:
 """
 
     payment_keyboard = [
-        [InlineKeyboardButton("💚 Easypaisa", callback_data=f"pay_easypaisa_{user_id}")],
-        [InlineKeyboardButton("🟡 Binance", callback_data=f"pay_binance_{user_id}")]
+        [InlineKeyboardButton("💚 Easypaisa", callback_data="pay_easypaisa_" + str(user_id))],
+        [InlineKeyboardButton("🟡 Binance", callback_data="pay_binance_" + str(user_id))]
     ]
     payment_markup = InlineKeyboardMarkup(payment_keyboard)
 
@@ -515,7 +505,7 @@ Please select your preferred payment method:
 
     # Update admin message to remove buttons and show processed
     await query.edit_message_text(
-        f"{query.message.text}\n\n<b>✅ APPROVED by Admin</b>\n<i>Payment request sent to user.</i>",
+        query.message.text + "\n\n<b>✅ APPROVED by Admin</b>\n<i>Payment request sent to user.</i>",
         parse_mode="HTML"
     )
 
@@ -537,7 +527,7 @@ async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log_admin_action(user_data.get('id'), 'rejected', ADMIN_ID)
 
     # Send rejection message to user
-    reject_message = f"""
+    reject_message = """
 <b>❌ Application Rejected</b>
 
 We regret to inform you that your application has been <b>rejected</b>.
@@ -565,7 +555,7 @@ If you believe this is a mistake, please contact our support team with valid doc
 
     # Update admin message
     await query.edit_message_text(
-        f"{query.message.text}\n\n<b>❌ REJECTED by Admin</b>",
+        query.message.text + "\n\n<b>❌ REJECTED by Admin</b>",
         parse_mode="HTML"
     )
 
@@ -581,12 +571,12 @@ async def select_payment_method(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = int(parts[2])
 
     if method == "easypaisa":
-        payment_details = f"""
+        payment_details = """
 <b>💚 Easypaisa Payment Details</b>
 
-<b>Account Name:</b> <code>{EASYPAYSA_NAME}</code>
-<b>Account Number:</b> <code>{EASYPAYSA_NUMBER}</code>
-<b>Amount:</b> <code>{MEMBERSHIP_FEE}</code>
+<b>Account Name:</b> <code>""" + EASYPAYSA_NAME + """</code>
+<b>Account Number:</b> <code>""" + EASYPAYSA_NUMBER + """</code>
+<b>Amount:</b> <code>""" + MEMBERSHIP_FEE + """</code>
 
 <b>📸 Next Step:</b>
 After making payment, please <b>upload screenshot</b> of your payment confirmation here.
@@ -597,12 +587,12 @@ After making payment, please <b>upload screenshot</b> of your payment confirmati
 • Fake screenshots will result in permanent ban
 """
     else:  # binance
-        payment_details = f"""
+        payment_details = """
 <b>🟡 Binance Payment Details</b>
 
-<b>Email:</b> <code>{BINANCE_EMAIL}</code>
-<b>User ID:</b> <code>{BINANCE_ID}</code>
-<b>Amount:</b> <code>{MEMBERSHIP_FEE}</code>
+<b>Email:</b> <code>""" + BINANCE_EMAIL + """</code>
+<b>User ID:</b> <code>""" + BINANCE_ID + """</code>
+<b>Amount:</b> <code>""" + MEMBERSHIP_FEE + """</code>
 
 <b>📸 Next Step:</b>
 After making payment, please <b>upload screenshot</b> of your payment confirmation here.
@@ -649,15 +639,15 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Notify admin
     user_data = get_user(user.id)
-    admin_payment_msg = f"""
+    admin_payment_msg = """
 <b>💰 PAYMENT PROOF RECEIVED</b>
 
 <b>From User:</b>
-<b>Name:</b> {user_data.get('full_name', 'N/A')}
-<b>Username:</b> @{user_data.get('username', 'N/A')}
-<b>Telegram ID:</b> <code>{user.id}</code>
-<b>Payment Method:</b> {user_data.get('payment_method', 'N/A').title()}
-<b>Amount:</b> {MEMBERSHIP_FEE}
+<b>Name:</b> """ + str(user_data.get('full_name', 'N/A')) + """
+<b>Username:</b> @""" + str(user_data.get('username', 'N/A')) + """
+<b>Telegram ID:</b> <code>""" + str(user.id) + """</code>
+<b>Payment Method:</b> """ + str(user_data.get('payment_method', 'N/A')).title() + """
+<b>Amount:</b> """ + MEMBERSHIP_FEE + """
 
 <b>📸 Payment Screenshot:</b> Attached above
 
@@ -666,8 +656,8 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
 
     payment_keyboard = [
         [
-            InlineKeyboardButton("✅ PAYMENT VERIFIED - GRANT ACCESS", callback_data=f"payment_approve_{user.id}"),
-            InlineKeyboardButton("❌ REJECT PAYMENT", callback_data=f"payment_reject_{user.id}")
+            InlineKeyboardButton("✅ PAYMENT VERIFIED - GRANT ACCESS", callback_data="payment_approve_" + str(user.id)),
+            InlineKeyboardButton("❌ REJECT PAYMENT", callback_data="payment_reject_" + str(user.id))
         ]
     ]
     payment_markup = InlineKeyboardMarkup(payment_keyboard)
@@ -701,13 +691,13 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log_admin_action(user_data.get('id'), 'payment_approved', ADMIN_ID)
 
     # Send community link to user
-    success_message = f"""
+    success_message = """
 <b>🎊 PAYMENT VERIFIED - WELCOME TO PREMIUM COMMUNITY!</b>
 
 <b>✅ Your Status:</b> <code>VERIFIED MEMBER</code>
 
 <b>🔗 Community Access Link:</b>
-{TELEGRAM_GROUP_LINK}
+""" + TELEGRAM_GROUP_LINK + """
 
 <b>📋 Community Rules & Restrictions:</b>
 
@@ -756,7 +746,7 @@ Contact admin anytime through this bot.
 
     # Update admin message
     await query.edit_message_text(
-        f"{query.message.text}\n\n<b>✅ PAYMENT VERIFIED & ACCESS GRANTED</b>",
+        query.message.text + "\n\n<b>✅ PAYMENT VERIFIED & ACCESS GRANTED</b>",
         parse_mode="HTML"
     )
 
@@ -773,7 +763,7 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_user(user_id, status="approved")
 
     # Notify user
-    retry_message = f"""
+    retry_message = """
 <b>❌ Payment Verification Failed</b>
 
 Your payment proof was <b>rejected</b>.
@@ -801,7 +791,7 @@ Payment details have been resent to you. Use /start to begin payment process aga
 
     # Update admin message
     await query.edit_message_text(
-        f"{query.message.text}\n\n<b>❌ PAYMENT REJECTED - User notified to retry</b>",
+        query.message.text + "\n\n<b>❌ PAYMENT REJECTED - User notified to retry</b>",
         parse_mode="HTML"
     )
 
@@ -824,40 +814,37 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # Get counts
-        cursor.execute("SELECT COUNT(*) as total FROM users")
-        total_users = cursor.fetchone()['total']
+            # Get counts
+            cursor.execute("SELECT COUNT(*) as total FROM users")
+            total_users = cursor.fetchone()['total']
 
-        cursor.execute("SELECT COUNT(*) as pending FROM users WHERE status = 'pending'")
-        pending = cursor.fetchone()['pending']
+            cursor.execute("SELECT COUNT(*) as pending FROM users WHERE status = 'pending'")
+            pending = cursor.fetchone()['pending']
 
-        cursor.execute("SELECT COUNT(*) as approved FROM users WHERE status = 'approved'")
-        approved = cursor.fetchone()['approved']
+            cursor.execute("SELECT COUNT(*) as approved FROM users WHERE status = 'approved'")
+            approved = cursor.fetchone()['approved']
 
-        cursor.execute("SELECT COUNT(*) as completed FROM users WHERE status = 'completed'")
-        completed = cursor.fetchone()['completed']
+            cursor.execute("SELECT COUNT(*) as completed FROM users WHERE status = 'completed'")
+            completed = cursor.fetchone()['completed']
 
-        cursor.execute("SELECT COUNT(*) as rejected FROM users WHERE status = 'rejected'")
-        rejected = cursor.fetchone()['rejected']
+            cursor.execute("SELECT COUNT(*) as rejected FROM users WHERE status = 'rejected'")
+            rejected = cursor.fetchone()['rejected']
 
-        cursor.close()
-        conn.close()
-
-        stats_text = f"""
+            stats_text = """
 <b>📊 BOT STATISTICS</b>
 
-<b>👥 Total Users:</b> <code>{total_users}</code>
-<b>⏳ Pending Review:</b> <code>{pending}</code>
-<b>✅ Approved (Awaiting Payment):</b> <code>{approved}</code>
-<b>🎉 Completed (Paid):</b> <code>{completed}</code>
-<b>❌ Rejected:</b> <code>{rejected}</code>
+<b>👥 Total Users:</b> <code>""" + str(total_users) + """</code>
+<b>⏳ Pending Review:</b> <code>""" + str(pending) + """</code>
+<b>✅ Approved (Awaiting Payment):</b> <code>""" + str(approved) + """</code>
+<b>🎉 Completed (Paid):</b> <code>""" + str(completed) + """</code>
+<b>❌ Rejected:</b> <code>""" + str(rejected) + """</code>
 
-<i>Last updated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</i>
+<i>Last updated: """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """</i>
 """
-        await update.message.reply_text(stats_text, parse_mode="HTML")
+            await update.message.reply_text(stats_text, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
@@ -900,12 +887,12 @@ def main():
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("stats", stats))
 
-    # Callback handlers for admin actions
-    application.add_handler(CallbackQueryHandler(approve_user, pattern="^approve_\d+$"))
-    application.add_handler(CallbackQueryHandler(reject_user, pattern="^reject_\d+$"))
-    application.add_handler(CallbackQueryHandler(select_payment_method, pattern="^pay_(easypaisa|binance)_\d+$"))
-    application.add_handler(CallbackQueryHandler(approve_payment, pattern="^payment_approve_\d+$"))
-    application.add_handler(CallbackQueryHandler(reject_payment, pattern="^payment_reject_\d+$"))
+    # Callback handlers for admin actions - FIXED REGEX PATTERNS
+    application.add_handler(CallbackQueryHandler(approve_user, pattern=r"^approve_\d+$"))
+    application.add_handler(CallbackQueryHandler(reject_user, pattern=r"^reject_\d+$"))
+    application.add_handler(CallbackQueryHandler(select_payment_method, pattern=r"^pay_(easypaisa|binance)_\d+$"))
+    application.add_handler(CallbackQueryHandler(approve_payment, pattern=r"^payment_approve_\d+$"))
+    application.add_handler(CallbackQueryHandler(reject_payment, pattern=r"^payment_reject_\d+$"))
 
     # Payment proof handler (outside conversation)
     application.add_handler(MessageHandler(
@@ -924,17 +911,8 @@ def main():
     ])
 
     # Start bot
-    if WEBHOOK_URL:
-        # Webhook mode (for Railway)
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=WEBHOOK_URL,
-            secret_token="premium_bot_secret"
-        )
-    else:
-        # Polling mode (for local testing)
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("Starting bot...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
