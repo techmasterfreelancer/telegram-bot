@@ -1,32 +1,32 @@
 import logging
 import sqlite3
 import hashlib
-import re
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 
-# ============= YOUR DETAILS HERE =============
+# ============= APNI DETAILS YAHAN DAALEN =============
 
 BOT_TOKEN = "8535390425:AAH4RF9v6k8H6fMQeXr_OQ6JuB7PV8gvgLs"
-ADMIN_ID = 7291034213  # YOUR_TELEGRAM_ID_HERE
+ADMIN_ID = 7291034213  # YAHAN_APNA_TELEGRAM_ID_DAALEN
 
 # GROUP LINKS
-TELEGRAM_GROUP_LINK = "https://t.me/+YOUR_TELEGRAM_LINK"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK"
+TELEGRAM_GROUP_LINK = "https://t.me/+YAHAN_TELEGRAM_LINK_DAALEN"
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YAHAN_WHATSAPP_LINK_DAALEN"
 
 # PAYMENT DETAILS
-BINANCE_EMAIL = "your.binance@email.com"
-BINANCE_ID = "YOUR_BINANCE_ID"
+BINANCE_EMAIL = "aapka.binance@email.com"
+BINANCE_ID = "123456789"
 BINANCE_NETWORK = "TRC20"
 
-EASYPAYSA_NAME = "Your Name"
+EASYPAYSA_NAME = "Aapka Naam"
 EASYPAYSA_NUMBER = "03XX-XXXXXXX"
 
 MEMBERSHIP_FEE = "$5 USD (Lifetime)"
 
-# =============================================
+# =====================================================
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -53,7 +53,6 @@ def init_db():
         payment_file_id TEXT,
         payment_hash TEXT UNIQUE,
         status TEXT DEFAULT 'new',
-        admin_approved INTEGER DEFAULT 0,
         created_at TIMESTAMP,
         updated_at TIMESTAMP
     )''')
@@ -124,18 +123,17 @@ def save_hash(file_hash, user_id):
     finally:
         conn.close()
 
-# ============= STATES =============
+# ============= CONVERSATION STATES =============
 
 SELECT_TYPE, GET_NAME, GET_EMAIL, GET_PROOF, GET_WHATSAPP, ADMIN_REVIEW, SELECT_PAYMENT, GET_PAYMENT_PROOF, FINAL_APPROVAL = range(9)
 
 # ============= START COMMAND =============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle start command with all resume scenarios"""
+    """Handle start command with resume feature"""
     user = update.effective_user
     user_id = user.id
     username = user.username or "No username"
-    first_name = user.first_name
     
     # Get existing user data
     user_data = get_user_data(user_id)
@@ -143,111 +141,102 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data:
         # New user
         create_user(user_id, username)
-        await send_welcome(update, first_name)
+        await send_welcome(update, user.first_name)
         return SELECT_TYPE
     
-    # Existing user - check all possible states
+    # Existing user - check status
     step = user_data[7]  # current_step
     status = user_data[11]  # status
-    admin_approved = user_data[12]  # admin_approved
     
-    # Case 1: Already fully approved and completed
-    if status == 'completed':
+    # If already approved
+    if status == 'approved':
         await update.message.reply_text(
-            f"✅ *Welcome back {first_name}!*\n\n"
-            f"You are already approved and have access to premium groups.\n\n"
+            f"✅ *Welcome back {user.first_name}!*\n\n"
+            f"Aap already approved hain.\n\n"
             f"🔗 *Telegram Group:*\n{TELEGRAM_GROUP_LINK}\n\n"
             f"📱 *WhatsApp Group:*\n{WHATSAPP_GROUP_LINK}",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
-    # Case 2: Admin approved but payment pending (REMINDER MODE)
-    if admin_approved == 1 and status == 'payment_pending':
+    # If payment pending
+    if status == 'payment_pending':
         keyboard = [
             [InlineKeyboardButton("💰 Binance", callback_data='pay_binance')],
             [InlineKeyboardButton("📱 Easypaisa", callback_data='pay_easypaisa')]
         ]
-        
         await update.message.reply_text(
-            f"⏰ *Payment Reminder for {first_name}*\n\n"
-            f"✅ Your submitted information has been *reviewed and approved* by admin!\n\n"
-            f"💳 *Only payment is remaining to join Premium Group.*\n\n"
-            f"💎 *Membership Fee:* {MEMBERSHIP_FEE}\n\n"
-            f"⚠️ *Please complete your payment now to get instant access.*\n\n"
-            f"👇 *Select payment method:*",
+            f"👋 *Welcome back {user.first_name}!*\n\n"
+            f"💎 *Premium Group Join Karne Ke Liye:*\n"
+            f"💵 *Fee:* {MEMBERSHIP_FEE}\n\n"
+            f"👇 *Payment method select karein:*",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
         return SELECT_PAYMENT
     
-    # Case 3: Info submitted, waiting for admin review
-    if step == 'info_submitted' and admin_approved == 0:
+    # If proof submitted, waiting for admin
+    if step == 'proof_submitted':
         await update.message.reply_text(
-            f"⏳ *Hello {first_name}!*\n\n"
-            f"✅ Your information has already been submitted for admin review.\n\n"
-            f"🕐 *Status: PENDING*\n"
-            f"Please wait... Admin will review and respond soon.\n\n"
-            f"🔔 You will receive a notification once approved.",
+            f"⏳ *Welcome back {user.first_name}!*\n\n"
+            f"Aapki application admin ke paas hai.\n"
+            f"🕐 *Approval ka intezaar karein...*\n\n"
+            f"Jab admin approve karega, aapko fee payment ka message mil jayega.",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
-    # Case 4: Payment proof submitted, waiting for verification
+    # If payment proof submitted
     if step == 'payment_submitted':
         await update.message.reply_text(
-            f"⏳ *Hello {first_name}!*\n\n"
-            f"✅ Your payment proof has been submitted.\n\n"
-            f"🕐 *Status: UNDER VERIFICATION*\n"
-            f"Admin is verifying your payment...\n\n"
-            f"🔔 You will receive group links once verified.",
+            f"⏳ *Welcome back {user.first_name}!*\n\n"
+            f"Aapka payment proof admin ke paas hai.\n"
+            f"🕐 *Verification ka intezaar karein...*",
             parse_mode=ParseMode.MARKDOWN
         )
         return ConversationHandler.END
     
-    # Case 5: Resume from where left
+    # Resume from where left
     if step == 'name_pending':
         await update.message.reply_text(
-            f"🔄 *Welcome back {first_name}!*\n\n"
-            f"Please complete your previous application.\n\n"
-            f"📝 *Step 1/4: Enter your full name:*",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"📝 *Apna full name bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_NAME
     
     if step == 'email_pending':
         await update.message.reply_text(
-            f"🔄 *Welcome back {first_name}!*\n\n"
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
             f"✅ Name: *{user_data[2]}*\n\n"
-            f"📧 *Step 2/4: Enter your email address:*",
+            f"📧 *Apna email bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_EMAIL
     
     if step == 'proof_pending':
-        request_type = user_data[5] or "purchase"
+        request_type = user_data[5] or "product"
         await update.message.reply_text(
-            f"🔄 *Welcome back {first_name}!*\n\n"
-            f"📸 *You haven't submitted your {request_type} proof yet.*\n\n"
-            f"Please send the screenshot/image:",
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
+            f"📸 *Aapne {request_type} ka proof nahi bheja.*\n\n"
+            f"Please screenshot bhejein:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_PROOF
     
     if step == 'whatsapp_pending':
         await update.message.reply_text(
-            f"🔄 *Welcome back {first_name}!*\n\n"
+            f"🔄 *Welcome back {user.first_name}!*\n\n"
             f"✅ Name: *{user_data[2]}*\n"
             f"✅ Email: *{user_data[3]}*\n"
             f"✅ Proof received\n\n"
-            f"📱 *Step 4/4: Enter your WhatsApp number (with country code):*\n\n"
-            f"Example: +923001234567, +14155552671, +447911123456",
+            f"📱 *Apna WhatsApp number bataiye:*",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
     
-    # Default - restart fresh
-    await send_welcome(update, first_name)
+    # Default - restart
+    await send_welcome(update, user.first_name)
     return SELECT_TYPE
 
 async def send_welcome(update, first_name):
@@ -259,8 +248,8 @@ async def send_welcome(update, first_name):
     
     await update.message.reply_text(
         f"👋 *Welcome {first_name}!*\n\n"
-        f"What did you buy from my website?\n\n"
-        f"👇 *Please select:*",
+        f"Kya aapne meri website se *Premium Subscription* buy ki hai ya *koi Product* buy kiya hai?\n\n"
+        f"👇 *Select karein:*",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -281,8 +270,8 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"✅ *{request_type}* selected!\n\n"
-        f"💎 *To add you to the premium group, we need some information.*\n\n"
-        f"📝 *Step 1/4: Enter your full name:*",
+        f"💎 *Premium group mein add hone ke liye kuch information li jayegi.*\n\n"
+        f"📝 *Step 1/4: Apna full name bataiye:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_NAME
@@ -294,19 +283,12 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     name = update.message.text
     
-    if len(name) < 2:
-        await update.message.reply_text(
-            "❌ *Name too short!* Please enter your full name:",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return GET_NAME
-    
     update_user(user_id, 'full_name', name)
     update_step(user_id, 'email_pending')
     
     await update.message.reply_text(
         f"✅ *Name: {name}*\n\n"
-        f"📧 *Step 2/4: Enter your email address:*",
+        f"📧 *Step 2/4: Apna email address bataiye:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_EMAIL
@@ -314,14 +296,12 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get email"""
     user_id = update.effective_user.id
-    email = update.message.text.lower().strip()
+    email = update.message.text
     
-    # Email validation
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_pattern, email):
+    # Validate
+    if "@" not in email or "." not in email:
         await update.message.reply_text(
-            "❌ *Invalid email format!* Please enter a valid email:\n\n"
-            f"Example: yourname@gmail.com",
+            "❌ *Invalid email!* Sahi email bataiye:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_EMAIL
@@ -331,17 +311,12 @@ async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Get request type for message
     user_data = get_user_data(user_id)
-    request_type = user_data[5] or "purchase"
-    
-    proof_text = "subscription proof" if request_type == "Premium Subscription" else "product proof"
+    request_type = user_data[5] or "product"
     
     await update.message.reply_text(
         f"✅ *Email: {email}*\n\n"
-        f"📸 *Step 3/4: Send your {proof_text} (screenshot/image):*\n\n"
-        f"⚠️ *Please send a clear image showing:*\n"
-        f"• Purchase/subscription details\n"
-        f"• Payment confirmation\n"
-        f"• Date and time visible",
+        f"📸 *Step 3/4: Apne {request_type} ka proof/screenshot bhejiye:*\n\n"
+        f"⚠️ *Clear image honi chahiye jisme details dikhein*",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_PROOF
@@ -352,7 +327,7 @@ async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not update.message.photo:
         await update.message.reply_text(
-            "❌ *Please send an image/screenshot!* Try again:",
+            "❌ *Please image bhejiye!* Screenshot bhejein:",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_PROOF
@@ -364,14 +339,13 @@ async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_user(user_id, 'proof_file_id', file_id)
     update_step(user_id, 'whatsapp_pending')
     
+    # Get user data for confirmation
+    user_data = get_user_data(user_id)
+    
     await update.message.reply_text(
-        f"✅ *Proof received successfully!*\n\n"
-        f"📱 *Step 4/4: Enter your WhatsApp number (with country code):*\n\n"
-        f"Examples:\n"
-        f"• Pakistan: +923001234567\n"
-        f"• USA: +14155552671\n"
-        f"• UK: +447911123456\n"
-        f"• India: +919876543210",
+        f"✅ *Proof received!*\n\n"
+        f"📱 *Step 4/4: Apna WhatsApp number bataiye (country code ke saath):*\n\n"
+        f"Example: +923001234567",
         parse_mode=ParseMode.MARKDOWN
     )
     return GET_WHATSAPP
@@ -379,34 +353,26 @@ async def get_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Get WhatsApp and submit to admin"""
     user_id = update.effective_user.id
-    whatsapp = update.message.text.strip()
+    whatsapp = update.message.text
     
-    # International phone validation
-    # Remove spaces, dashes, and parentheses
-    clean_number = re.sub(r'[\s\-\(\)\.]', '', whatsapp)
-    
-    # Check if starts with + and has 10-15 digits
-    if not re.match(r'^\+\d{10,15}$', clean_number):
+    # Basic validation
+    if len(whatsapp) < 10 or not whatsapp.replace('+', '').replace('-', '').isdigit():
         await update.message.reply_text(
-            "❌ *Invalid WhatsApp number!*\n\n"
-            f"Please enter with country code:\n"
-            f"• +923001234567 (Pakistan)\n"
-            f"• +14155552671 (USA)\n"
-            f"• +447911123456 (UK)\n"
-            f"• +919876543210 (India)",
+            "❌ *Invalid number!* Sahi WhatsApp number bataiye:\n\n"
+            f"Example: +923001234567",
             parse_mode=ParseMode.MARKDOWN
         )
         return GET_WHATSAPP
     
-    update_user(user_id, 'whatsapp', clean_number)
-    update_step(user_id, 'info_submitted')
+    update_user(user_id, 'whatsapp', whatsapp)
+    update_step(user_id, 'proof_submitted')
     
     # Confirm to user
     await update.message.reply_text(
-        "✅ *Your information has been successfully submitted!*\n\n"
-        "🕐 *It has been sent to admin for review.*\n\n"
-        "⏳ Please wait...\n"
-        "🔔 You will receive a notification once admin reviews your application.",
+        "✅ *Aapki information successfully submit ho gayi hai!*\n\n"
+        "🕐 *Aap se jald contact kiya jayega.*\n\n"
+        "⏳ Admin review kar raha hai...\n"
+        "🔔 Jab approve hoga, aapko fee payment ka message mil jayega.",
         parse_mode=ParseMode.MARKDOWN
     )
     
@@ -421,17 +387,17 @@ async def get_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     caption = f"""
-🆕 *NEW APPLICATION FOR REVIEW*
+🆕 *NEW APPLICATION*
 
 👤 *User:* @{user_data[1]}
 🆔 *ID:* `{user_id}`
 📋 *Type:* {user_data[5]}
 📝 *Name:* {user_data[2]}
 📧 *Email:* {user_data[3]}
-📱 *WhatsApp:* {clean_number}
-⏰ *Submitted:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
+📱 *WhatsApp:* {whatsapp}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 *Please review and take action:*
+👇 *Action karein:*
     """
     
     # Send proof photo if available
@@ -462,13 +428,9 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = int(query.data.split('_')[1])
     
-    # Update status - mark admin approved but payment pending
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("UPDATE users SET admin_approved = 1, status = 'payment_pending', current_step = 'payment_pending', updated_at = ? WHERE user_id = ?",
-              (datetime.now(), user_id))
-    conn.commit()
-    conn.close()
+    # Update status
+    update_user(user_id, 'status', 'payment_pending')
+    update_step(user_id, 'payment_pending')
     
     # Send fee message to user
     keyboard = [
@@ -479,21 +441,21 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=user_id,
         text=f"""
-🎉 *CONGRATULATIONS! YOUR APPLICATION IS APPROVED!*
+🎉 *APPLICATION APPROVED!*
 
-✅ Admin has reviewed and *approved* your application!
+✅ Admin ne aapki application *verify* kar li hai!
 
-💎 *To join Premium Group, please pay the Lifetime Membership Fee:*
+💎 *Premium Group Join Karne Ke Liye Lifetime Fee:*
 💵 *{MEMBERSHIP_FEE}*
 
-👇 *Select your payment method:*
+👇 *Payment method select karein:*
         """,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.MARKDOWN
     )
     
     await query.edit_message_text(
-        f"✅ *Approved!*\n\nUser `{user_id}` has been notified to complete payment.",
+        f"✅ *Approved!*\n\nUser `{user_id}` ko fee message bhej diya.",
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -507,7 +469,7 @@ async def admin_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"❌ *Rejecting user {user_id}*\n\n"
-        f"*Please enter rejection reason:*",
+        f"*Reason bataiye (message bhejein):*",
         parse_mode=ParseMode.MARKDOWN
     )
     return ADMIN_REVIEW
@@ -527,11 +489,11 @@ async def handle_rejection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"""
 ❌ *APPLICATION REJECTED*
 
-Your application has been rejected.
+Aapki application reject kar di gayi hai.
 
 *Reason:* {reason}
 
-You can apply again by sending /start
+Dubara apply karne ke liye /start karein.
         """,
         parse_mode=ParseMode.MARKDOWN
     )
@@ -561,18 +523,18 @@ async def show_payment_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
 💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ *After payment, please send the screenshot here.*
+✅ *Payment karne ke baad screenshot yahan bhejein.*
         """
     else:
         details = f"""
 📱 *EASYPAYSA PAYMENT DETAILS*
 
-👤 *Account Name:* {EASYPAYSA_NAME}
-📞 *Account Number:* `{EASYPAYSA_NUMBER}`
+👤 *Name:* {EASYPAYSA_NAME}
+📞 *Number:* `{EASYPAYSA_NUMBER}`
 
 💵 *Amount:* {MEMBERSHIP_FEE}
 
-✅ *After payment, please send the screenshot here.*
+✅ *Payment karne ke baad screenshot yahan bhejein.*
         """
     
     await context.bot.send_message(
@@ -596,19 +558,13 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     # Check if user is in payment phase
     user_data = get_user_data(user_id)
     
-    if not user_data:
-        return
-    
-    status = user_data[11]
-    admin_approved = user_data[12]
-    
-    # Only process if admin approved and payment pending
-    if not (admin_approved == 1 and status == 'payment_pending'):
+    if not user_data or user_data[11] != 'payment_pending':
+        # Not in payment phase, ignore or handle as new proof
         return
     
     if not update.message.photo:
         await update.message.reply_text(
-            "❌ *Please send payment screenshot as image!*",
+            "❌ *Please payment ka screenshot bhejiye!*",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -624,7 +580,7 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     duplicate = check_duplicate(image_hash)
     if duplicate:
         await update.message.reply_text(
-            "🚫 *THIS SCREENSHOT HAS ALREADY BEEN USED!*",
+            "🚫 *YE SCREENSHOT PEHLE USE HO CHUKA HAI!*",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -635,40 +591,40 @@ async def receive_payment_proof(update: Update, context: ContextTypes.DEFAULT_TY
     # Update user
     conn = get_db()
     c = conn.cursor()
-    c.execute("UPDATE users SET payment_file_id = ?, payment_hash = ?, current_step = ?, status = ? WHERE user_id = ?",
-              (photo.file_id, image_hash, 'payment_submitted', 'payment_verification', user_id))
+    c.execute("UPDATE users SET payment_file_id = ?, payment_hash = ?, current_step = ? WHERE user_id = ?",
+              (photo.file_id, image_hash, 'payment_submitted', user_id))
     conn.commit()
     conn.close()
     
     # Confirm to user
     await update.message.reply_text(
         "⏳ *Payment Screenshot Received!*\n\n"
-        "✅ Admin is verifying your payment...\n"
-        "🕐 *You will receive group links once verified.*\n\n"
-        "⚠️ *Fake screenshots will result in permanent ban!*",
+        "✅ Admin verify kar raha hai...\n"
+        "🕐 *Approval ke baad aapko group link mil jayega.*\n\n"
+        "⚠️ *Fake screenshot par ban lag sakta hai!*",
         parse_mode=ParseMode.MARKDOWN
     )
     
     # Send to admin
     keyboard = [
         [
-            InlineKeyboardButton("✅ Approve & Send Links", callback_data=f'finallink_{user_id}'),
-            InlineKeyboardButton("❌ Reject Payment", callback_data=f'rejectpay_{user_id}')
+            InlineKeyboardButton("✅ Approve & Send Link", callback_data=f'finallink_{user_id}'),
+            InlineKeyboardButton("❌ Reject", callback_data=f'rejectpay_{user_id}')
         ]
     ]
     
     caption = f"""
-💰 *NEW PAYMENT RECEIVED FOR VERIFICATION*
+💰 *NEW PAYMENT RECEIVED*
 
 👤 *User:* @{user_data[1]}
 🆔 *ID:* `{user_id}`
 📝 *Name:* {user_data[2]}
 📧 *Email:* {user_data[3]}
 📱 *WhatsApp:* {user_data[4]}
-💳 *Payment Method:* {user_data[8] or 'Not specified'}
-⏰ *Received:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
+💳 *Method:* {user_data[8]}
+⏰ *Time:* {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-👇 *Please verify and take action:*
+👇 *Verify karein:*
     """
     
     await context.bot.send_photo(
@@ -686,38 +642,36 @@ async def final_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = int(query.data.split('_')[1])
     
-    # Update status to completed
-    update_user(user_id, 'status', 'completed')
-    update_step(user_id, 'completed')
+    # Update status
+    update_user(user_id, 'status', 'approved')
     
     # Send links to user
     await context.bot.send_message(
         chat_id=user_id,
         text=f"""
-🎉 *PAYMENT VERIFIED SUCCESSFULLY!*
+🎉 *PAYMENT APPROVED!*
 
-✅ Your payment has been verified!
+✅ Aapki payment verify ho gayi hai!
 
-🔗 *TELEGRAM PREMIUM GROUP:*
+🔗 *TELEGRAM GROUP:*
 {TELEGRAM_GROUP_LINK}
 
-📱 *WHATSAPP PREMIUM GROUP:*
+📱 *WHATSAPP GROUP:*
 {WHATSAPP_GROUP_LINK}
 
-⚠️ *Important Rules:*
-• Do not share these links with anyone
-• Follow all group rules
-• Do not add fake members
-• Lifetime access granted
+⚠️ *Important:*
+• Links share nahi karein
+• Group rules follow karein
+• Fake members add nahi karein
 
-🚀 *Welcome to Premium Family! Enjoy your access!*
+🚀 *Welcome to Premium Family!*
         """,
         parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=False
     )
     
     await query.edit_message_text(
-        f"✅ *User {user_id} fully approved!*\nBoth group links sent.",
+        f"✅ *User {user_id} approved!*\nGroup links sent.",
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -731,8 +685,8 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['reject_type'] = 'payment'
     
     await query.edit_message_text(
-        f"❌ *Rejecting payment from user {user_id}*\n\n"
-        f"*Please enter rejection reason:*",
+        f"❌ *Rejecting payment {user_id}*\n\n"
+        f"*Reason bataiye:*",
         parse_mode=ParseMode.MARKDOWN
     )
     return FINAL_APPROVAL
@@ -742,7 +696,7 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel"""
     await update.message.reply_text(
-        "❌ Cancelled.\nSend /start to begin again."
+        "❌ Cancelled.\nDubara shuru karne ke liye /start karein."
     )
     return ConversationHandler.END
 
@@ -778,7 +732,7 @@ def main():
     # Payment proof handler
     application.add_handler(MessageHandler(filters.PHOTO, receive_payment_proof))
     
-    print("🤖 Bot is running...")
+    print("🤖 Bot chal raha hai...")
     application.run_polling()
 
 if __name__ == "__main__":
