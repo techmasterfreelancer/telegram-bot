@@ -9,7 +9,7 @@ from telegram.constants import ParseMode
 
 # ============= YOUR DETAILS HERE =============
 
-BOT_TOKEN = "8535390425:AAFLbRWHfy9reLO94h91N5wlAou4gxfgK3c"
+BOT_TOKEN = "8535390425:AAF67T7kjqxYxmjQTFhCH_l_6RnT_aB5frg"
 ADMIN_ID = 7291034213  # YOUR_TELEGRAM_ID_HERE
 
 # GROUP LINKS
