@@ -76,7 +76,7 @@ def update_user(user_id, field, value):
     conn.commit()
     conn.close()
 
-# ============= MESSAGES =============
+# ============= PROFESSIONAL MESSAGES =============
 
 WELCOME_MESSAGE = """
 🎉 *Welcome to Premium Support Bot!* 🎉
@@ -564,9 +564,7 @@ async def handle_text(update: Update, context):
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # ==================== ADMIN NOTIFICATION (FIXED) ====================
-        logger.info(f"📤 Sending admin notification for user {user_id}")
-        
+        # ==================== ADMIN NOTIFICATION (SAME AS WORKING CODE) ====================
         try:
             # Fresh data fetch
             fresh_data = get_user(user_id)
@@ -580,7 +578,7 @@ async def handle_text(update: Update, context):
                 ]
             ]
             
-            # Admin message - SIMPLE & WORKING (Purane code jaisa)
+            # Admin message - SIMPLE & WORKING
             admin_text = f"""
 🚨 *NEW APPLICATION RECEIVED* 🚨
 
@@ -600,9 +598,7 @@ async def handle_text(update: Update, context):
 👇 *Please review and take action:*
 """
             
-            logger.info(f"📨 Sending to ADMIN_ID: {ADMIN_ID}")
-            
-            # Send notification (Purane code jaisa simple tarika)
+            # Send notification (SAME AS WORKING CODE)
             if fresh_data[6]:  # proof exists
                 await context.bot.send_photo(
                     chat_id=ADMIN_ID,
