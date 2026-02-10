@@ -160,7 +160,7 @@ WhatsApp:
 Welcome to the Inner Circle.
 """
 
-# ================= BOT LOGIC =================
+# ================= START =================
 
 async def start(update: Update, context):
     user = update.effective_user
@@ -180,17 +180,97 @@ async def start(update: Update, context):
         parse_mode=ParseMode.MARKDOWN
     )
 
+# ================= CALLBACK HANDLER =================
+
 async def handle_callback(update: Update, context):
     query = update.callback_query
     await query.answer()
+    data = query.data
     user_id = query.from_user.id
 
-    if query.data.startswith("type_"):
-        t = "Premium Subscription" if "premium" in query.data else "Product Purchase"
+    # TYPE SELECT
+    if data.startswith("type_"):
+        t = "Premium Subscription" if "premium" in data else "Product Purchase"
         update_user(user_id, "request_type", t)
         update_user(user_id, "current_step", "name_pending")
         await query.edit_message_text(STEP1, parse_mode=ParseMode.MARKDOWN)
         return
+
+    # ADMIN APPROVE APPLICATION
+    if data.startswith("approve_"):
+        target = int(data.split("_")[1])
+
+        update_user(target, "admin_approved", 1)
+        update_user(target, "status", "payment_pending")
+
+        keyboard = [
+            [InlineKeyboardButton("💰 Binance", callback_data="pay_binance")],
+            [InlineKeyboardButton("📱 Easypaisa", callback_data="pay_easypaisa")]
+        ]
+
+        await context.bot.send_message(
+            chat_id=target,
+            text=f"🎉 APPROVED!\n\nMembership Fee: {MEMBERSHIP_FEE}\n\nSelect payment method:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        # REMOVE BUTTONS
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    # ADMIN REJECT APPLICATION
+    if data.startswith("reject_"):
+        target = int(data.split("_")[1])
+
+        await context.bot.send_message(
+            chat_id=target,
+            text="❌ Your application has been rejected."
+        )
+
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    # PAYMENT METHOD SELECT
+    if data.startswith("pay_"):
+        if "binance" in data:
+            text = f"""
+💰 BINANCE PAYMENT
+
+Email: {BINANCE_EMAIL}
+ID: {BINANCE_ID}
+Network: {BINANCE_NETWORK}
+Amount: {MEMBERSHIP_FEE}
+"""
+        else:
+            text = f"""
+📱 EASYPAYSA PAYMENT
+
+Name: {EASYPAYSA_NAME}
+Number: {EASYPAYSA_NUMBER}
+Amount: {MEMBERSHIP_FEE}
+"""
+        await query.edit_message_text(text)
+        return
+
+    # FINAL APPROVE PAYMENT
+    if data.startswith("final_"):
+        target = int(data.split("_")[1])
+
+        update_user(target, "status", "completed")
+
+        await context.bot.send_message(
+            chat_id=target,
+            text=SUCCESS_MESSAGE.format(
+                telegram_link=TELEGRAM_GROUP_LINK,
+                whatsapp_link=WHATSAPP_GROUP_LINK
+            ),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+# ================= TEXT =================
 
 async def handle_text(update: Update, context):
     user_id = update.effective_user.id
@@ -220,31 +300,28 @@ async def handle_text(update: Update, context):
 
         updated = get_user(user_id)
 
-        await update.message.reply_text(SUBMITTED, parse_mode=ParseMode.MARKDOWN)
-
         keyboard = [[
             InlineKeyboardButton("✅ APPROVE", callback_data=f"approve_{user_id}"),
             InlineKeyboardButton("❌ REJECT", callback_data=f"reject_{user_id}")
         ]]
 
-        admin_msg = f"""
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"""
 🚨 NEW PREMIUM REQUEST
-
-👤 @{updated[1]}
-🆔 {user_id}
 
 Name: {updated[2]}
 Email: {updated[3]}
 WhatsApp: {updated[4]}
 Type: {updated[5]}
-"""
-
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_msg,
+""",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+        await update.message.reply_text(SUBMITTED, parse_mode=ParseMode.MARKDOWN)
         return
+
+# ================= PHOTO =================
 
 async def handle_photo(update: Update, context):
     user_id = update.effective_user.id
@@ -254,6 +331,8 @@ async def handle_photo(update: Update, context):
         update_user(user_id, "proof_file_id", update.message.photo[-1].file_id)
         update_user(user_id, "current_step", "whatsapp_pending")
         await update.message.reply_text(STEP4, parse_mode=ParseMode.MARKDOWN)
+
+# ================= MAIN =================
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
