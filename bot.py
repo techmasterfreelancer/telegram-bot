@@ -657,17 +657,13 @@ async def handle_text(update: Update, context):
             f"{UI.ICONS['success']} <b>Application Submitted SuccessFully!</b>\n\n"
             f"{UI.ICONS['wait']} Your information has been sent for review.\n"
             f"You will be notified once approved.",
-			⏳ *What happens next?*
-            • Admin will review your application within 24 hours
-            • You'll receive approval notification here
-            • Then you can complete payment to join
-
-            📊 *Your Application Status:* PENDING REVIEW
-
-            🔔 *You'll be notified as soon as admin approves!*
-
-            ⚠️ *Please do not send multiple applications.*
-            """
+            f"{UI.ICONS⏳ *What happens next.\n"
+            f"{UI.ICONSAdmin will review your application within 24 hours.\n"
+            f"{UI.ICONSYou'll receive approval notification here.\n"
+            f"{UI.ICONSThen you can complete payment to join.\n"
+            f"{UI.ICONSYour Application Status:* PENDING REVIEW.\n"
+            f"{UI.ICONSYou'll be notified as soon as admin approves.\n"
+            f"{UI.ICONSPlease do not send multiple applications.\n"
             parse_mode=ParseMode.HTML
         )
         
