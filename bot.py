@@ -13,7 +13,7 @@ from telegram.constants import ParseMode
 BOT_TOKEN = "8535390425:AAE-K_QBPRw7e23GoWnGzCISz7T6pjpBLjQ"
 ADMIN_ID = 7291034213
 TELEGRAM_GROUP_LINK = "https://t.me/+P8gZuIBH75RiOThk"
-WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_WHATSAPP_LINK_HERE"
+WHATSAPP_GROUP_LINK = "https://whatsapp.com/channel/0029Vb7V2LhCBtx9LIdwKr1g"
 
 # Binance Details - UPDATED
 BINANCE_EMAIL = "techmasterfreelancer@gmail.com"
